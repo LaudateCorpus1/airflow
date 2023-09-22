@@ -18,17 +18,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
+from unittest import mock
 
 import pytest
 
 from airflow.providers.google.cloud.triggers.datafusion import DataFusionStartPipelineTrigger
 from airflow.triggers.base import TriggerEvent
-
-if sys.version_info < (3, 8):
-    from asynctest import mock
-else:
-    from unittest import mock
 
 HOOK_STATUS_STR = "airflow.providers.google.cloud.hooks.datafusion.DataFusionAsyncHook.get_pipeline_status"
 CLASSPATH = "airflow.providers.google.cloud.triggers.datafusion.DataFusionStartPipelineTrigger"
@@ -41,6 +36,7 @@ PROJECT_ID = "test_project_id"
 PIPELINE_NAME = "shrubberyPipeline"
 PIPELINE = {"test": "pipeline"}
 PIPELINE_ID = "test_pipeline_id"
+PIPELINE_TYPE = "batch"
 INSTANCE_URL = "http://datafusion.instance.com"
 NAMESPACE = "TEST_NAMESPACE"
 RUNTIME_ARGS = {"arg1": "a", "arg2": "b"}
@@ -55,6 +51,7 @@ def trigger():
         namespace=NAMESPACE,
         pipeline_name=PIPELINE_NAME,
         pipeline_id=PIPELINE_ID,
+        pipeline_type=PIPELINE_TYPE,
         poll_interval=TEST_POLL_INTERVAL,
         gcp_conn_id=TEST_GCP_PROJECT_ID,
     )
@@ -73,6 +70,7 @@ class TestDataFusionStartPipelineTrigger:
             "namespace": NAMESPACE,
             "pipeline_name": PIPELINE_NAME,
             "pipeline_id": PIPELINE_ID,
+            "pipeline_type": PIPELINE_TYPE,
             "gcp_conn_id": TEST_GCP_PROJECT_ID,
             "success_states": None,
         }

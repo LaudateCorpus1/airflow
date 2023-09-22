@@ -15,14 +15,13 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Airflow models"""
+"""Airflow models."""
 from __future__ import annotations
 
 # Do not add new models to this -- this is for compat only
 __all__ = [
     "DAG",
     "ID_LEN",
-    "XCOM_RETURN_KEY",
     "Base",
     "BaseOperator",
     "BaseOperatorLink",
@@ -60,16 +59,10 @@ def import_all_models():
     for name in __lazy_imports:
         __getattr__(name)
 
-    import airflow.jobs.backfill_job
-    import airflow.jobs.base_job
-    import airflow.jobs.local_task_job
-    import airflow.jobs.scheduler_job
-    import airflow.jobs.triggerer_job
     import airflow.models.dagwarning
     import airflow.models.dataset
     import airflow.models.serialized_dag
     import airflow.models.tasklog
-    import airflow.www.fab_security.sqla.models
 
 
 def __getattr__(name):
@@ -89,7 +82,6 @@ def __getattr__(name):
 __lazy_imports = {
     "DAG": "airflow.models.dag",
     "ID_LEN": "airflow.models.base",
-    "XCOM_RETURN_KEY": "airflow.models.xcom",
     "Base": "airflow.models.base",
     "BaseOperator": "airflow.models.baseoperator",
     "BaseOperatorLink": "airflow.models.baseoperator",
@@ -143,4 +135,4 @@ if TYPE_CHECKING:
     from airflow.models.taskreschedule import TaskReschedule
     from airflow.models.trigger import Trigger
     from airflow.models.variable import Variable
-    from airflow.models.xcom import XCOM_RETURN_KEY, XCom
+    from airflow.models.xcom import XCom

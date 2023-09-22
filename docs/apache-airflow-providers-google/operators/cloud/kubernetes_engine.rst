@@ -27,7 +27,7 @@ consists of multiple machines (specifically, Compute Engine instances) grouped t
 Prerequisite Tasks
 ^^^^^^^^^^^^^^^^^^
 
-.. include::/operators/_partials/prerequisite_tasks.rst
+.. include:: /operators/_partials/prerequisite_tasks.rst
 
 Manage GKE cluster
 ^^^^^^^^^^^^^^^^^^
@@ -59,6 +59,18 @@ definition, is required when creating a cluster with
     :start-after: [START howto_operator_gke_create_cluster]
     :end-before: [END howto_operator_gke_create_cluster]
 
+You can use deferrable mode for this action in order to run the operator asynchronously. It will give you a
+possibility to free up the worker when it knows it has to wait, and hand off the job of resuming Operator to a Trigger.
+As a result, while it is suspended (deferred), it is not taking up a worker slot and your cluster will have a
+lot less resources wasted on idle Operators or Sensors:
+
+.. exampleinclude:: /../../tests/system/providers/google/cloud/kubernetes_engine/example_kubernetes_engine_async.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_gke_create_cluster_async]
+    :end-before: [END howto_operator_gke_create_cluster_async]
+
+
 .. _howto/operator:GKEDeleteClusterOperator:
 
 Delete GKE cluster
@@ -74,6 +86,17 @@ This would also delete all the nodes allocated to the cluster.
     :start-after: [START howto_operator_gke_delete_cluster]
     :end-before: [END howto_operator_gke_delete_cluster]
 
+You can use deferrable mode for this action in order to run the operator asynchronously. It will give you a
+possibility to free up the worker when it knows it has to wait, and hand off the job of resuming Operator to a Trigger.
+As a result, while it is suspended (deferred), it is not taking up a worker slot and your cluster will have a
+lot less resources wasted on idle Operators or Sensors:
+
+.. exampleinclude:: /../../tests/system/providers/google/cloud/kubernetes_engine/example_kubernetes_engine_async.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_gke_delete_cluster_async]
+    :end-before: [END howto_operator_gke_delete_cluster_async]
+
 Manage workloads on a GKE cluster
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -88,7 +111,7 @@ Run a Pod on a GKE cluster
 
 There are two operators available in order to run a pod on a GKE cluster:
 
-* :class:`~airflow.providers.cncf.kubernetes.operators.kubernetes_pod.KubernetesPodOperator`
+* :class:`~airflow.providers.cncf.kubernetes.operators.pod.KubernetesPodOperator`
 * :class:`~airflow.providers.google.cloud.operators.kubernetes_engine.GKEStartPodOperator`
 
 ``GKEStartPodOperator`` extends ``KubernetesPodOperator`` to provide authorization using Google Cloud credentials.
@@ -112,7 +135,7 @@ Use of XCom
 '''''''''''
 
 We can enable the usage of :ref:`XCom <concepts:xcom>` on the operator. This works by launching a sidecar container
-with the pod specified. The sidecar is automatically mounted when the XCom usage is specified and it's mount point
+with the pod specified. The sidecar is automatically mounted when the XCom usage is specified and its mount point
 is the path ``/airflow/xcom``. To provide values to the XCom, ensure your Pod writes it into a file called
 ``return.json`` in the sidecar. The contents of this can then be used downstream in your DAG.
 Here is an example of it being used:
@@ -130,6 +153,17 @@ And then use it in other operators:
     :dedent: 4
     :start-after: [START howto_operator_gke_xcom_result]
     :end-before: [END howto_operator_gke_xcom_result]
+
+You can use deferrable mode for this action in order to run the operator asynchronously. It will give you a
+possibility to free up the worker when it knows it has to wait, and hand off the job of resuming Operator to a Trigger.
+As a result, while it is suspended (deferred), it is not taking up a worker slot and your cluster will have a
+lot less resources wasted on idle Operators or Sensors:
+
+.. exampleinclude:: /../../tests/system/providers/google/cloud/kubernetes_engine/example_kubernetes_engine_async.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_gke_start_pod_xcom_async]
+    :end-before: [END howto_operator_gke_start_pod_xcom_async]
 
 Reference
 ^^^^^^^^^

@@ -36,12 +36,11 @@ CONSOLE_WIDTH = 180
 
 
 def prepare_code_snippet(file_path: str, line_no: int, context_lines_count: int = 5) -> str:
-    """
-    Prepares code snippet.
+    """Prepares code snippet.
+
     :param file_path: file path
     :param line_no: line number
     :param context_lines_count: number of lines of context.
-    :return:
     """
 
     def guess_lexer_for_filename(filename):
@@ -67,7 +66,7 @@ def prepare_code_snippet(file_path: str, line_no: int, context_lines_count: int 
                 code=code, formatter=TerminalFormatter(), lexer=guess_lexer_for_filename(file_path)
             )
 
-        code_lines = code.split("\n")
+        code_lines = code.splitlines()
         # Prepend line number
         code_lines = [f"{line_no:4} | {line}" for line_no, line in enumerate(code_lines, 1)]
         # # Cut out the snippet

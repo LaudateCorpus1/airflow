@@ -17,31 +17,31 @@
 # under the License.
 from __future__ import annotations
 
-import warnings
 from typing import TYPE_CHECKING, Sequence
 
 from google.api_core.gapic_v1.method import DEFAULT, _MethodDefault
-from google.api_core.retry import Retry
 from google.cloud.monitoring_v3 import AlertPolicy, NotificationChannel
 
-from airflow.models import BaseOperator
 from airflow.providers.google.cloud.hooks.stackdriver import StackdriverHook
 from airflow.providers.google.cloud.links.stackdriver import (
     StackdriverNotificationsLink,
     StackdriverPoliciesLink,
 )
+from airflow.providers.google.cloud.operators.cloud_base import GoogleCloudBaseOperator
 
 if TYPE_CHECKING:
+    from google.api_core.retry import Retry
+
     from airflow.utils.context import Context
 
 
-class StackdriverListAlertPoliciesOperator(BaseOperator):
+class StackdriverListAlertPoliciesOperator(GoogleCloudBaseOperator):
     """
-    Fetches all the Alert Policies identified by the filter passed as
-    filter parameter. The desired return type can be specified by the
-    format parameter, the supported formats are "dict", "json" and None
-    which returns python dictionary, stringified JSON and protobuf
-    respectively.
+    Fetches all the Alert Policies identified by the filter passed as filter parameter.
+
+    The desired return type can be specified by the format parameter, the supported
+    formats are "dict", "json" and None which returns python dictionary, stringified
+    JSON and protobuf respectively.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -71,9 +71,6 @@ class StackdriverListAlertPoliciesOperator(BaseOperator):
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google
         Cloud Platform.
     :param project_id: The project to fetch alerts from.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -103,7 +100,6 @@ class StackdriverListAlertPoliciesOperator(BaseOperator):
         metadata: Sequence[tuple[str, str]] = (),
         gcp_conn_id: str = "google_cloud_default",
         project_id: str | None = None,
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -117,11 +113,6 @@ class StackdriverListAlertPoliciesOperator(BaseOperator):
         self.metadata = metadata
         self.gcp_conn_id = gcp_conn_id
         self.project_id = project_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
         self.hook: StackdriverHook | None = None
 
@@ -137,7 +128,6 @@ class StackdriverListAlertPoliciesOperator(BaseOperator):
         if self.hook is None:
             self.hook = StackdriverHook(
                 gcp_conn_id=self.gcp_conn_id,
-                delegate_to=self.delegate_to,
                 impersonation_chain=self.impersonation_chain,
             )
 
@@ -159,10 +149,11 @@ class StackdriverListAlertPoliciesOperator(BaseOperator):
         return [AlertPolicy.to_dict(policy) for policy in result]
 
 
-class StackdriverEnableAlertPoliciesOperator(BaseOperator):
+class StackdriverEnableAlertPoliciesOperator(GoogleCloudBaseOperator):
     """
-    Enables one or more disabled alerting policies identified by filter
-    parameter. Inoperative in case the policy is already enabled.
+    Enables one or more disabled alerting policies identified by filter parameter.
+
+    Inoperative in case the policy is already enabled.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -180,9 +171,6 @@ class StackdriverEnableAlertPoliciesOperator(BaseOperator):
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google
         Cloud Platform.
     :param project_id: The project in which alert needs to be enabled.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -209,18 +197,12 @@ class StackdriverEnableAlertPoliciesOperator(BaseOperator):
         metadata: Sequence[tuple[str, str]] = (),
         gcp_conn_id: str = "google_cloud_default",
         project_id: str | None = None,
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.gcp_conn_id = gcp_conn_id
         self.project_id = project_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.filter_ = filter_
         self.retry = retry
         self.timeout = timeout
@@ -233,7 +215,6 @@ class StackdriverEnableAlertPoliciesOperator(BaseOperator):
         if self.hook is None:
             self.hook = StackdriverHook(
                 gcp_conn_id=self.gcp_conn_id,
-                delegate_to=self.delegate_to,
                 impersonation_chain=self.impersonation_chain,
             )
         self.hook.enable_alert_policies(
@@ -251,10 +232,11 @@ class StackdriverEnableAlertPoliciesOperator(BaseOperator):
 
 
 # Disable Alert Operator
-class StackdriverDisableAlertPoliciesOperator(BaseOperator):
+class StackdriverDisableAlertPoliciesOperator(GoogleCloudBaseOperator):
     """
-    Disables one or more enabled alerting policies identified by filter
-    parameter. Inoperative in case the policy is already disabled.
+    Disables one or more enabled alerting policies identified by filter parameter.
+
+    Inoperative in case the policy is already disabled.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -272,9 +254,6 @@ class StackdriverDisableAlertPoliciesOperator(BaseOperator):
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google
         Cloud Platform.
     :param project_id: The project in which alert needs to be disabled.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -301,18 +280,12 @@ class StackdriverDisableAlertPoliciesOperator(BaseOperator):
         metadata: Sequence[tuple[str, str]] = (),
         gcp_conn_id: str = "google_cloud_default",
         project_id: str | None = None,
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.gcp_conn_id = gcp_conn_id
         self.project_id = project_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.filter_ = filter_
         self.retry = retry
         self.timeout = timeout
@@ -325,7 +298,6 @@ class StackdriverDisableAlertPoliciesOperator(BaseOperator):
         if self.hook is None:
             self.hook = StackdriverHook(
                 gcp_conn_id=self.gcp_conn_id,
-                delegate_to=self.delegate_to,
                 impersonation_chain=self.impersonation_chain,
             )
         self.hook.disable_alert_policies(
@@ -342,10 +314,9 @@ class StackdriverDisableAlertPoliciesOperator(BaseOperator):
         )
 
 
-class StackdriverUpsertAlertOperator(BaseOperator):
+class StackdriverUpsertAlertOperator(GoogleCloudBaseOperator):
     """
-    Creates a new alert or updates an existing policy identified
-    the name field in the alerts parameter.
+    Creates a new alert or updates an existing policy identified the name field in the alerts parameter.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -364,9 +335,6 @@ class StackdriverUpsertAlertOperator(BaseOperator):
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google
         Cloud Platform.
     :param project_id: The project in which alert needs to be created/updated.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -395,7 +363,6 @@ class StackdriverUpsertAlertOperator(BaseOperator):
         metadata: Sequence[tuple[str, str]] = (),
         gcp_conn_id: str = "google_cloud_default",
         project_id: str | None = None,
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -406,11 +373,6 @@ class StackdriverUpsertAlertOperator(BaseOperator):
         self.metadata = metadata
         self.gcp_conn_id = gcp_conn_id
         self.project_id = project_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
         self.hook: StackdriverHook | None = None
 
@@ -419,7 +381,6 @@ class StackdriverUpsertAlertOperator(BaseOperator):
         if self.hook is None:
             self.hook = StackdriverHook(
                 gcp_conn_id=self.gcp_conn_id,
-                delegate_to=self.delegate_to,
                 impersonation_chain=self.impersonation_chain,
             )
         self.hook.upsert_alert(
@@ -436,7 +397,7 @@ class StackdriverUpsertAlertOperator(BaseOperator):
         )
 
 
-class StackdriverDeleteAlertOperator(BaseOperator):
+class StackdriverDeleteAlertOperator(GoogleCloudBaseOperator):
     """
     Deletes an alerting policy.
 
@@ -455,9 +416,6 @@ class StackdriverDeleteAlertOperator(BaseOperator):
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google
         Cloud Platform.
     :param project_id: The project from which alert needs to be deleted.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -484,7 +442,6 @@ class StackdriverDeleteAlertOperator(BaseOperator):
         metadata: Sequence[tuple[str, str]] = (),
         gcp_conn_id: str = "google_cloud_default",
         project_id: str | None = None,
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -495,11 +452,6 @@ class StackdriverDeleteAlertOperator(BaseOperator):
         self.metadata = metadata
         self.gcp_conn_id = gcp_conn_id
         self.project_id = project_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
         self.hook: StackdriverHook | None = None
 
@@ -508,7 +460,6 @@ class StackdriverDeleteAlertOperator(BaseOperator):
         if self.hook is None:
             self.hook = StackdriverHook(
                 gcp_conn_id=self.gcp_conn_id,
-                delegate_to=self.delegate_to,
                 impersonation_chain=self.impersonation_chain,
             )
         self.hook.delete_alert_policy(
@@ -519,13 +470,13 @@ class StackdriverDeleteAlertOperator(BaseOperator):
         )
 
 
-class StackdriverListNotificationChannelsOperator(BaseOperator):
+class StackdriverListNotificationChannelsOperator(GoogleCloudBaseOperator):
     """
-    Fetches all the Notification Channels identified by the filter passed as
-    filter parameter. The desired return type can be specified by the
-    format parameter, the supported formats are "dict", "json" and None
-    which returns python dictionary, stringified JSON and protobuf
-    respectively.
+    Fetches all the Notification Channels identified by the filter passed as filter parameter.
+
+    The desired return type can be specified by the format parameter, the
+    supported formats are "dict", "json" and None which returns python
+    dictionary, stringified JSON and protobuf respectively.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -555,9 +506,6 @@ class StackdriverListNotificationChannelsOperator(BaseOperator):
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google
         Cloud Platform.
     :param project_id: The project to fetch notification channels from.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -588,7 +536,6 @@ class StackdriverListNotificationChannelsOperator(BaseOperator):
         metadata: Sequence[tuple[str, str]] = (),
         gcp_conn_id: str = "google_cloud_default",
         project_id: str | None = None,
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -602,11 +549,6 @@ class StackdriverListNotificationChannelsOperator(BaseOperator):
         self.metadata = metadata
         self.gcp_conn_id = gcp_conn_id
         self.project_id = project_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
         self.hook: StackdriverHook | None = None
 
@@ -622,7 +564,6 @@ class StackdriverListNotificationChannelsOperator(BaseOperator):
         if self.hook is None:
             self.hook = StackdriverHook(
                 gcp_conn_id=self.gcp_conn_id,
-                delegate_to=self.delegate_to,
                 impersonation_chain=self.impersonation_chain,
             )
         channels = self.hook.list_notification_channels(
@@ -643,10 +584,11 @@ class StackdriverListNotificationChannelsOperator(BaseOperator):
         return [NotificationChannel.to_dict(channel) for channel in channels]
 
 
-class StackdriverEnableNotificationChannelsOperator(BaseOperator):
+class StackdriverEnableNotificationChannelsOperator(GoogleCloudBaseOperator):
     """
-    Enables one or more disabled alerting policies identified by filter
-    parameter. Inoperative in case the policy is already enabled.
+    Enables one or more disabled alerting policies identified by filter parameter.
+
+    Inoperative in case the policy is already enabled.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -664,9 +606,6 @@ class StackdriverEnableNotificationChannelsOperator(BaseOperator):
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google
         Cloud Platform.
     :param project_id: The location used for the operation.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -694,7 +633,6 @@ class StackdriverEnableNotificationChannelsOperator(BaseOperator):
         metadata: Sequence[tuple[str, str]] = (),
         gcp_conn_id: str = "google_cloud_default",
         project_id: str | None = None,
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -705,11 +643,6 @@ class StackdriverEnableNotificationChannelsOperator(BaseOperator):
         self.metadata = metadata
         self.gcp_conn_id = gcp_conn_id
         self.project_id = project_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
         self.hook: StackdriverHook | None = None
 
@@ -720,7 +653,6 @@ class StackdriverEnableNotificationChannelsOperator(BaseOperator):
         if self.hook is None:
             self.hook = StackdriverHook(
                 gcp_conn_id=self.gcp_conn_id,
-                delegate_to=self.delegate_to,
                 impersonation_chain=self.impersonation_chain,
             )
         self.hook.enable_notification_channels(
@@ -737,10 +669,11 @@ class StackdriverEnableNotificationChannelsOperator(BaseOperator):
         )
 
 
-class StackdriverDisableNotificationChannelsOperator(BaseOperator):
+class StackdriverDisableNotificationChannelsOperator(GoogleCloudBaseOperator):
     """
-    Disables one or more enabled notification channels identified by filter
-    parameter. Inoperative in case the policy is already disabled.
+    Disables one or more enabled notification channels identified by filter parameter.
+
+    Inoperative in case the policy is already disabled.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -758,9 +691,6 @@ class StackdriverDisableNotificationChannelsOperator(BaseOperator):
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google
         Cloud Platform.
     :param project_id: The project in which notification channels needs to be enabled.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -788,7 +718,6 @@ class StackdriverDisableNotificationChannelsOperator(BaseOperator):
         metadata: Sequence[tuple[str, str]] = (),
         gcp_conn_id: str = "google_cloud_default",
         project_id: str | None = None,
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -799,11 +728,6 @@ class StackdriverDisableNotificationChannelsOperator(BaseOperator):
         self.metadata = metadata
         self.gcp_conn_id = gcp_conn_id
         self.project_id = project_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
         self.hook: StackdriverHook | None = None
 
@@ -814,7 +738,6 @@ class StackdriverDisableNotificationChannelsOperator(BaseOperator):
         if self.hook is None:
             self.hook = StackdriverHook(
                 gcp_conn_id=self.gcp_conn_id,
-                delegate_to=self.delegate_to,
                 impersonation_chain=self.impersonation_chain,
             )
         self.hook.disable_notification_channels(
@@ -831,10 +754,11 @@ class StackdriverDisableNotificationChannelsOperator(BaseOperator):
         )
 
 
-class StackdriverUpsertNotificationChannelOperator(BaseOperator):
+class StackdriverUpsertNotificationChannelOperator(GoogleCloudBaseOperator):
     """
-    Creates a new notification or updates an existing notification channel
-    identified the name field in the alerts parameter.
+    Create a new notification or updates an existing notification channel.
+
+    Channel is identified by the name field in the alerts parameter.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -853,9 +777,6 @@ class StackdriverUpsertNotificationChannelOperator(BaseOperator):
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google
         Cloud Platform.
     :param project_id: The project in which notification channels needs to be created/updated.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -884,7 +805,6 @@ class StackdriverUpsertNotificationChannelOperator(BaseOperator):
         metadata: Sequence[tuple[str, str]] = (),
         gcp_conn_id: str = "google_cloud_default",
         project_id: str | None = None,
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -895,11 +815,6 @@ class StackdriverUpsertNotificationChannelOperator(BaseOperator):
         self.metadata = metadata
         self.gcp_conn_id = gcp_conn_id
         self.project_id = project_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
         self.hook: StackdriverHook | None = None
 
@@ -910,7 +825,6 @@ class StackdriverUpsertNotificationChannelOperator(BaseOperator):
         if self.hook is None:
             self.hook = StackdriverHook(
                 gcp_conn_id=self.gcp_conn_id,
-                delegate_to=self.delegate_to,
                 impersonation_chain=self.impersonation_chain,
             )
         self.hook.upsert_channel(
@@ -927,7 +841,7 @@ class StackdriverUpsertNotificationChannelOperator(BaseOperator):
         )
 
 
-class StackdriverDeleteNotificationChannelOperator(BaseOperator):
+class StackdriverDeleteNotificationChannelOperator(GoogleCloudBaseOperator):
     """
     Deletes a notification channel.
 
@@ -946,9 +860,6 @@ class StackdriverDeleteNotificationChannelOperator(BaseOperator):
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google
         Cloud Platform.
     :param project_id: The project from which notification channel needs to be deleted.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -975,7 +886,6 @@ class StackdriverDeleteNotificationChannelOperator(BaseOperator):
         metadata: Sequence[tuple[str, str]] = (),
         gcp_conn_id: str = "google_cloud_default",
         project_id: str | None = None,
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -986,11 +896,6 @@ class StackdriverDeleteNotificationChannelOperator(BaseOperator):
         self.metadata = metadata
         self.gcp_conn_id = gcp_conn_id
         self.project_id = project_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
         self.hook: StackdriverHook | None = None
 
@@ -999,7 +904,6 @@ class StackdriverDeleteNotificationChannelOperator(BaseOperator):
         if self.hook is None:
             self.hook = StackdriverHook(
                 gcp_conn_id=self.gcp_conn_id,
-                delegate_to=self.delegate_to,
                 impersonation_chain=self.impersonation_chain,
             )
         self.hook.delete_notification_channel(

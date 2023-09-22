@@ -19,10 +19,10 @@
 from __future__ import annotations
 
 import time
+from functools import cached_property
 from typing import TYPE_CHECKING, Sequence
 
 from google.api_core.gapic_v1.method import DEFAULT, _MethodDefault
-from google.api_core.retry import Retry
 from google.cloud.bigquery_datatransfer_v1 import (
     StartManualTransferRunsResponse,
     TransferConfig,
@@ -30,14 +30,16 @@ from google.cloud.bigquery_datatransfer_v1 import (
     TransferState,
 )
 
-from airflow import AirflowException
-from airflow.compat.functools import cached_property
-from airflow.models import BaseOperator
+from airflow.configuration import conf
+from airflow.exceptions import AirflowException
 from airflow.providers.google.cloud.hooks.bigquery_dts import BiqQueryDataTransferServiceHook, get_object_id
 from airflow.providers.google.cloud.links.bigquery_dts import BigQueryDataTransferConfigLink
+from airflow.providers.google.cloud.operators.cloud_base import GoogleCloudBaseOperator
 from airflow.providers.google.cloud.triggers.bigquery_dts import BigQueryDataTransferRunTrigger
 
 if TYPE_CHECKING:
+    from google.api_core.retry import Retry
+
     from airflow.utils.context import Context
 
 
@@ -46,7 +48,7 @@ def _get_transfer_config_details(config_transfer_name: str):
     return {"project_id": config_details[1], "region": config_details[3], "config_id": config_details[5]}
 
 
-class BigQueryCreateDataTransferOperator(BaseOperator):
+class BigQueryCreateDataTransferOperator(GoogleCloudBaseOperator):
     """
     Creates a new data transfer configuration.
 
@@ -138,10 +140,13 @@ class BigQueryCreateDataTransferOperator(BaseOperator):
         result = TransferConfig.to_dict(response)
         self.log.info("Created DTS transfer config %s", get_object_id(result))
         self.xcom_push(context, key="transfer_config_id", value=get_object_id(result))
+        # don't push AWS secret in XCOM
+        result.get("params", {}).pop("secret_access_key", None)
+        result.get("params", {}).pop("access_key_id", None)
         return result
 
 
-class BigQueryDeleteDataTransferConfigOperator(BaseOperator):
+class BigQueryDeleteDataTransferConfigOperator(GoogleCloudBaseOperator):
     """
     Deletes transfer configuration.
 
@@ -213,12 +218,12 @@ class BigQueryDeleteDataTransferConfigOperator(BaseOperator):
         )
 
 
-class BigQueryDataTransferServiceStartTransferRunsOperator(BaseOperator):
+class BigQueryDataTransferServiceStartTransferRunsOperator(GoogleCloudBaseOperator):
     """
-    Start manual transfer runs to be executed now with schedule_time equal
-    to current time. The transfer runs can be created for a time range where
-    the run_time is between start_time (inclusive) and end_time
-    (exclusive), or for a specific run_time.
+    Start manual transfer runs to be executed now with schedule_time equal to current time.
+
+    The transfer runs can be created for a time range where the run_time is between
+    start_time (inclusive) and end_time (exclusive), or for a specific run_time.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -276,7 +281,7 @@ class BigQueryDataTransferServiceStartTransferRunsOperator(BaseOperator):
         metadata: Sequence[tuple[str, str]] = (),
         gcp_conn_id="google_cloud_default",
         impersonation_chain: str | Sequence[str] | None = None,
-        deferrable: bool = False,
+        deferrable: bool = conf.getboolean("operators", "default_deferrable", fallback=False),
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -303,6 +308,10 @@ class BigQueryDataTransferServiceStartTransferRunsOperator(BaseOperator):
 
     def execute(self, context: Context):
         self.log.info("Submitting manual transfer for %s", self.transfer_config_id)
+
+        if self.requested_run_time and isinstance(self.requested_run_time.get("seconds"), str):
+            self.requested_run_time["seconds"] = int(self.requested_run_time["seconds"])
+
         response = self.hook.start_manual_transfer_runs(
             transfer_config_id=self.transfer_config_id,
             requested_time_range=self.requested_time_range,
@@ -347,7 +356,7 @@ class BigQueryDataTransferServiceStartTransferRunsOperator(BaseOperator):
         )
 
     def _wait_for_transfer_to_be_done(self, run_id: str, transfer_config_id: str, interval: int = 10):
-        if interval < 0:
+        if interval <= 0:
             raise ValueError("Interval must be > 0")
 
         while True:

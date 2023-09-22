@@ -19,8 +19,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import tempfile
-from pathlib import Path
+from importlib.util import find_spec
 
 import pytest
 
@@ -84,7 +83,6 @@ class TestPythonPackages:
             lines = PREINSTALLED_PROVIDERS
         else:
             lines = (d.strip() for d in INSTALLED_PROVIDER_PATH.read_text().splitlines())
-            lines = (d for d in lines)
         packages_to_install = {f"apache-airflow-providers-{d.replace('.', '-')}" for d in lines}
         assert len(packages_to_install) != 0
 
@@ -126,10 +124,10 @@ class TestPythonPackages:
         "cncf.kubernetes": ["kubernetes", "cryptography"],
         "dask": ["cloudpickle", "distributed"],
         "docker": ["docker"],
-        "elasticsearch": ["elasticsearch", "es.elastic", "elasticsearch_dsl"],
+        "elasticsearch": ["elasticsearch"],
         "google": [
             "OpenSSL",
-            "google.ads",
+            # "google.ads", Remove google ads as it is vendored in google provider now
             "googleapiclient",
             "google.auth",
             "google_auth_httplib2",
@@ -161,7 +159,6 @@ class TestPythonPackages:
         "grpc": ["grpc", "google.auth", "google_auth_httplib2"],
         "hashicorp": ["hvac"],
         "ldap": ["ldap"],
-        "mysql": ["mysql"],
         "postgres": ["psycopg2"],
         "pyodbc": ["pyodbc"],
         "redis": ["redis"],
@@ -171,6 +168,8 @@ class TestPythonPackages:
         "statsd": ["statsd"],
         "virtualenv": ["virtualenv"],
     }
+    if bool(find_spec("mysql")):
+        PACKAGE_IMPORTS["mysql"] = ["mysql"]
 
     @pytest.mark.skipif(os.environ.get("TEST_SLIM_IMAGE") == "true", reason="Skipped with slim image")
     @pytest.mark.parametrize("package_name,import_names", PACKAGE_IMPORTS.items())
@@ -195,27 +194,26 @@ class TestExecuteAsRoot:
             ]
         )
 
-    def test_run_custom_python_packages_as_root(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            (Path(tmp_dir) / "__init__.py").write_text("")
-            (Path(tmp_dir) / "awesome.py").write_text('print("Awesome")')
+    def test_run_custom_python_packages_as_root(self, tmp_path):
+        (tmp_path / "__init__.py").write_text("")
+        (tmp_path / "awesome.py").write_text('print("Awesome")')
 
-            run_command(
-                [
-                    "docker",
-                    "run",
-                    "--rm",
-                    "-e",
-                    f"PYTHONPATH={tmp_dir}",
-                    "-e",
-                    "PYTHONDONTWRITEBYTECODE=true",
-                    "-v",
-                    f"{tmp_dir}:{tmp_dir}",
-                    "--user",
-                    "0",
-                    docker_image,
-                    "python",
-                    "-c",
-                    "import awesome",
-                ]
-            )
+        run_command(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-e",
+                f"PYTHONPATH={tmp_path}",
+                "-e",
+                "PYTHONDONTWRITEBYTECODE=true",
+                "-v",
+                f"{tmp_path}:{tmp_path}",
+                "--user",
+                "0",
+                docker_image,
+                "python",
+                "-c",
+                "import awesome",
+            ]
+        )

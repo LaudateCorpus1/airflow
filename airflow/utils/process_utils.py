@@ -80,6 +80,8 @@ def reap_process_group(
         returncodes[p.pid] = p.returncode
 
     def signal_procs(sig):
+        if IS_WINDOWS:
+            return
         try:
             logger.info("Sending the signal %s to group %s", sig, process_group_id)
             os.killpg(process_group_id, sig)
@@ -92,7 +94,7 @@ def reap_process_group(
                     + [str(p.pid) for p in all_processes_in_the_group]
                 )
             elif err_killpg.errno == errno.ESRCH:
-                # There is a rare condition that the process has not managed yet to change it's process
+                # There is a rare condition that the process has not managed yet to change its process
                 # group. In this case os.killpg fails with ESRCH error
                 # So we additionally send a kill signal to the process itself.
                 logger.info(
@@ -108,7 +110,7 @@ def reap_process_group(
             else:
                 raise
 
-    if process_group_id == os.getpgid(0):
+    if not IS_WINDOWS and process_group_id == os.getpgid(0):
         raise RuntimeError("I refuse to kill myself")
 
     try:
@@ -117,7 +119,7 @@ def reap_process_group(
         all_processes_in_the_group = parent.children(recursive=True)
         all_processes_in_the_group.append(parent)
     except psutil.NoSuchProcess:
-        # The process already exited, but maybe it's children haven't.
+        # The process already exited, but maybe its children haven't.
         all_processes_in_the_group = []
         for proc in psutil.process_iter():
             try:
@@ -162,6 +164,7 @@ def reap_process_group(
 def execute_in_subprocess(cmd: list[str], cwd: str | None = None) -> None:
     """
     Execute a process and stream output to logger.
+
     :param cmd: command and arguments to run
     :param cwd: Current working directory passed to the Popen constructor
     """
@@ -281,7 +284,7 @@ def patch_environ(new_env_variables: dict[str, str]) -> Generator[None, None, No
     After leaving the context, it restores its original state.
     :param new_env_variables: Environment variables to set
     """
-    current_env_state = {key: os.environ.get(key) for key in new_env_variables.keys()}
+    current_env_state = {key: os.environ.get(key) for key in new_env_variables}
     os.environ.update(new_env_variables)
     try:
         yield
@@ -296,7 +299,8 @@ def patch_environ(new_env_variables: dict[str, str]) -> Generator[None, None, No
 
 def check_if_pidfile_process_is_running(pid_file: str, process_name: str):
     """
-    Checks if a pidfile already exists and process is still running.
+    Check if a pidfile already exists and process is still running.
+
     If process is dead then pidfile is removed.
 
     :param pid_file: path to the pidfile
@@ -321,11 +325,13 @@ def check_if_pidfile_process_is_running(pid_file: str, process_name: str):
 
 
 def set_new_process_group() -> None:
-    """
-    Try to set current process to a new process group.
+    """Try to set current process to a new process group.
+
     That makes it easy to kill all sub-process of this at the OS-level,
     rather than having to iterate the child processes.
-    If current process spawn by system call ``exec()`` than keep current process group
+
+    If current process was spawned by system call ``exec()``, the current
+    process group is kept.
     """
     if os.getpid() == os.getsid(0):
         # If PID = SID than process a session leader, and it is not possible to change process group

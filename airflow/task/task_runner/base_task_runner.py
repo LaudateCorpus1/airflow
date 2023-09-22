@@ -29,6 +29,7 @@ if not IS_WINDOWS:
     # ignored to avoid flake complaining on Linux
     from pwd import getpwnam  # noqa
 
+from typing import TYPE_CHECKING
 
 from airflow.configuration import conf
 from airflow.exceptions import AirflowConfigException
@@ -36,6 +37,9 @@ from airflow.utils.configuration import tmp_configuration_copy
 from airflow.utils.log.logging_mixin import LoggingMixin
 from airflow.utils.net import get_hostname
 from airflow.utils.platform import getuser
+
+if TYPE_CHECKING:
+    from airflow.jobs.local_task_job_runner import LocalTaskJobRunner
 
 PYTHONPATH_VAR = "PYTHONPATH"
 
@@ -46,18 +50,17 @@ class BaseTaskRunner(LoggingMixin):
 
     Invoke the `airflow tasks run` command with raw mode enabled in a subprocess.
 
-    :param local_task_job: The local task job associated with running the
-        associated task instance.
+    :param job_runner: The LocalTaskJobRunner associated with the task runner
     """
 
-    def __init__(self, local_task_job):
-        # Pass task instance context into log handlers to setup the logger.
-        super().__init__(local_task_job.task_instance)
-        self._task_instance = local_task_job.task_instance
+    def __init__(self, job_runner: LocalTaskJobRunner):
+        self.job_runner = job_runner
+        super().__init__(job_runner.task_instance)
+        self._task_instance = job_runner.task_instance
 
         popen_prepend = []
         if self._task_instance.run_as_user:
-            self.run_as_user = self._task_instance.run_as_user
+            self.run_as_user: str | None = self._task_instance.run_as_user
         else:
             try:
                 self.run_as_user = conf.get("core", "default_impersonation")
@@ -94,10 +97,10 @@ class BaseTaskRunner(LoggingMixin):
         self._cfg_path = cfg_path
         self._command = popen_prepend + self._task_instance.command_as_list(
             raw=True,
-            pickle_id=local_task_job.pickle_id,
-            mark_success=local_task_job.mark_success,
-            job_id=local_task_job.id,
-            pool=local_task_job.pool,
+            pickle_id=self.job_runner.pickle_id,
+            mark_success=self.job_runner.mark_success,
+            job_id=self.job_runner.job.id,
+            pool=self.job_runner.pool,
             cfg_path=cfg_path,
         )
         self.process = None
@@ -165,7 +168,7 @@ class BaseTaskRunner(LoggingMixin):
         """Start running the task instance in a subprocess."""
         raise NotImplementedError()
 
-    def return_code(self, timeout: int = 0) -> int | None:
+    def return_code(self, timeout: float = 0.0) -> int | None:
         """
         Extract the return code.
 
@@ -179,9 +182,20 @@ class BaseTaskRunner(LoggingMixin):
         raise NotImplementedError()
 
     def on_finish(self) -> None:
-        """A callback that should be called when this is done running."""
+        """Execute when this is done running."""
         if self._cfg_path and os.path.isfile(self._cfg_path):
             if self.run_as_user:
                 subprocess.call(["sudo", "rm", self._cfg_path], close_fds=True)
             else:
                 os.remove(self._cfg_path)
+
+    def get_process_pid(self) -> int:
+        """Get the process pid."""
+        if hasattr(self, "process") and self.process is not None and hasattr(self.process, "pid"):
+            # this is a backwards compatibility for custom task runners that were used before
+            # the process.pid attribute was accessed by local_task_job directly but since process
+            # was either subprocess.Popen or psutil.Process it was not possible to have it really
+            # common in the base task runner - instead we changed it to use get_process_pid method and leave
+            # it to the task_runner to implement it
+            return self.process.pid
+        raise NotImplementedError()

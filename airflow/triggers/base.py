@@ -44,25 +44,22 @@ class BaseTrigger(abc.ABC, LoggingMixin):
         self.trigger_id = None
 
     def _set_context(self, context):
-        """
-        This method, part of LoggingMixin, is used mainly for configuration of logging
-        for tasks, but is not used for triggers.
-        """
+        """Part of LoggingMixin and used mainly for configuration of task logging; not used for triggers."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def serialize(self) -> tuple[str, dict[str, Any]]:
         """
-        Returns the information needed to reconstruct this Trigger.
+        Return the information needed to reconstruct this Trigger.
 
         :return: Tuple of (class path, keyword arguments needed to re-instantiate).
         """
         raise NotImplementedError("Triggers must implement serialize()")
 
     @abc.abstractmethod
-    async def run(self) -> AsyncIterator["TriggerEvent"]:
+    async def run(self) -> AsyncIterator[TriggerEvent]:
         """
-        Runs the trigger in an asynchronous context.
+        Run the trigger in an asynchronous context.
 
         The trigger should yield an Event whenever it wants to fire off
         an event, and return None if it is finished. Single-event triggers
@@ -79,12 +76,18 @@ class BaseTrigger(abc.ABC, LoggingMixin):
         raise NotImplementedError("Triggers must implement run()")
         yield  # To convince Mypy this is an async iterator.
 
-    def cleanup(self) -> None:
+    async def cleanup(self) -> None:
         """
         Cleanup the trigger.
 
         Called when the trigger is no longer needed, and it's being removed
         from the active triggerer process.
+
+        This method follows the async/await pattern to allow to run the cleanup
+        in triggerer main event loop. Exceptions raised by the cleanup method
+        are ignored, so if you would like to be able to debug them and be notified
+        that cleanup method failed, you should wrap your code with try/except block
+        and handle it appropriately (in async-compatible way).
         """
 
     def __repr__(self) -> str:

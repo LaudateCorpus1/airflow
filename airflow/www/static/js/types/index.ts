@@ -17,34 +17,43 @@
  * under the License.
  */
 
-import * as API from './api-generated';
+import type { CamelCase } from "type-fest";
+import type {
+  ElkExtendedEdge,
+  ElkEdgeSection,
+  ElkLabel,
+  ElkPoint,
+  ElkShape,
+  LayoutOptions,
+} from "elkjs";
+import type * as API from "./api-generated";
 
-type RunState = 'success' | 'running' | 'queued' | 'failed';
+type RunState = "success" | "running" | "queued" | "failed";
 
-type TaskState = RunState
-| 'removed'
-| 'scheduled'
-| 'shutdown'
-| 'restarting'
-| 'up_for_retry'
-| 'up_for_reschedule'
-| 'upstream_failed'
-| 'skipped'
-| 'deferred'
-| null;
+type TaskState =
+  | RunState
+  | "removed"
+  | "scheduled"
+  | "restarting"
+  | "up_for_retry"
+  | "up_for_reschedule"
+  | "upstream_failed"
+  | "skipped"
+  | "deferred"
+  | null;
 
 interface Dag {
-  id: string,
-  rootDagId: string,
-  isPaused: boolean,
-  isSubdag: boolean,
-  owners: Array<string>,
-  description: string,
+  id: string;
+  rootDagId: string;
+  isPaused: boolean;
+  isSubdag: boolean;
+  owners: Array<string>;
+  description: string;
 }
 
 interface DagRun {
   runId: string;
-  runType: 'manual' | 'backfill' | 'scheduled' | 'dataset_triggered';
+  runType: "manual" | "backfill" | "scheduled" | "dataset_triggered";
   state: RunState;
   executionDate: string;
   dataIntervalStart: string;
@@ -67,7 +76,8 @@ interface TaskInstance {
   state: TaskState | null;
   mappedStates?: {
     [key: string]: number;
-  },
+  };
+  queuedDttm?: string | null;
   mapIndex?: number;
   tryNumber?: number;
   triggererJob?: Job;
@@ -95,19 +105,47 @@ interface Task {
   isMapped?: boolean;
   operator?: string;
   hasOutletDatasets?: boolean;
+  triggerRule?: API.TriggerRule;
+  setupTeardownType?: "setup" | "teardown";
 }
 
-type RunOrdering = ('dataIntervalStart' | 'executionDate' | 'dataIntervalEnd')[];
+type RunOrdering = (
+  | "dataIntervalStart"
+  | "executionDate"
+  | "dataIntervalEnd"
+)[];
+
+export interface MidEdge {
+  id: string;
+  sources: string[];
+  targets: string[];
+  isSetupTeardown: boolean | undefined;
+  parentNode: string | undefined;
+  labels: {
+    id: string;
+    text: string;
+    height: number;
+    width: number;
+  }[];
+}
 
 interface DepNode {
   id: string;
   value: {
     id?: string;
-    class: 'dag' | 'dataset' | 'trigger' | 'sensor';
+    class: "dag" | "dataset" | "trigger" | "sensor";
     label: string;
     rx: number;
     ry: number;
-  }
+    isOpen?: boolean;
+    isJoinNode?: boolean;
+    childCount?: number;
+    labelStyle: string;
+    style: string;
+    setupTeardownType?: "setup" | "teardown";
+  };
+  children?: DepNode[];
+  edges?: MidEdge[];
 }
 
 interface DepEdge {
@@ -115,21 +153,80 @@ interface DepEdge {
   target: string;
 }
 
+export interface EdgeData {
+  rest: {
+    isSelected: boolean;
+    sources: string[];
+    targets: string[];
+    sections: ElkEdgeSection[];
+    junctionPoints?: ElkPoint[];
+    id: string;
+    labels?: ElkLabel[];
+    layoutOptions?: LayoutOptions;
+    isSetupTeardown?: boolean;
+    parentNode?: string;
+  };
+}
+
+export interface NodeType extends ElkShape {
+  value: DepNode["value"];
+  children?: NodeType[];
+  edges?: ElkExtendedEdge[];
+}
+
+export interface WebserverEdge {
+  label?: string;
+  sourceId: string;
+  targetId: string;
+  isSetupTeardown?: boolean;
+  parentNode?: string;
+}
+
 interface DatasetListItem extends API.Dataset {
   lastDatasetUpdate: string | null;
   totalUpdates: number;
 }
 
+type MinimalTaskInstance = Pick<TaskInstance, "taskId" | "mapIndex" | "runId">;
+
+type PrimaryShortcutKey = "ctrlKey" | "shiftKey" | "altKey" | "metaKey";
+
+interface KeyboardShortcutKeys {
+  primaryKey: PrimaryShortcutKey;
+  secondaryKey: Array<string>;
+  detail: string;
+}
+
+interface KeyboardShortcutIdentifier {
+  [name: string]: KeyboardShortcutKeys;
+}
+
+interface HistoricalMetricsData {
+  dagRunStates: {
+    [K in CamelCase<RunState>]: number;
+  };
+  dagRunTypes: {
+    [K in CamelCase<DagRun["runType"]>]: number;
+  };
+  taskInstanceStates: {
+    [K in TaskState extends string ? CamelCase<K> : never]: number;
+  };
+}
+
 export type {
+  API,
   Dag,
   DagRun,
-  RunState,
-  TaskState,
-  TaskInstance,
-  Task,
-  DepNode,
-  DepEdge,
-  API,
-  RunOrdering,
   DatasetListItem,
+  DepEdge,
+  DepNode,
+  HistoricalMetricsData,
+  MinimalTaskInstance,
+  RunOrdering,
+  RunState,
+  Task,
+  TaskInstance,
+  TaskState,
+  KeyboardShortcutKeys,
+  KeyboardShortcutIdentifier,
 };

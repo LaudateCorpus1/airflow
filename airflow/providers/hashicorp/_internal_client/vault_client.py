@@ -16,12 +16,15 @@
 # under the License.
 from __future__ import annotations
 
+from functools import cached_property
+
 import hvac
 from hvac.api.auth_methods import Kubernetes
 from hvac.exceptions import InvalidPath, VaultError
-from requests import Response
+from requests import Response, Session
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
-from airflow.compat.functools import cached_property
 from airflow.utils.log.logging_mixin import LoggingMixin
 
 DEFAULT_KUBERNETES_JWT_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -45,10 +48,12 @@ VALID_AUTH_TYPES: list[str] = [
 
 class _VaultClient(LoggingMixin):
     """
-    Retrieves Authenticated client from Hashicorp Vault. This is purely internal class promoting
-    authentication code reuse between the Hook and the SecretBackend, it should not be used directly in
-    Airflow DAGs. Use VaultBackend for backend integration and Hook in case you want to communicate
-    with VaultHook using standard Airflow Connection definition.
+    Retrieves Authenticated client from Hashicorp Vault.
+
+    This is purely internal class promoting authentication code reuse between the Hook and the
+    SecretBackend, it should not be used directly in Airflow DAGs. Use VaultBackend for backend
+    integration and Hook in case you want to communicate with VaultHook using standard Airflow
+    Connection definition.
 
     :param url: Base URL for the Vault instance being addressed.
     :param auth_type: Authentication Type for Vault. Default is ``token``. Available values are in
@@ -89,7 +94,7 @@ class _VaultClient(LoggingMixin):
         url: str | None = None,
         auth_type: str = "token",
         auth_mount_point: str | None = None,
-        mount_point: str = "secret",
+        mount_point: str | None = "secret",
         kv_engine_version: int | None = None,
         token: str | None = None,
         token_path: str | None = None,
@@ -142,7 +147,7 @@ class _VaultClient(LoggingMixin):
             if not radius_secret:
                 raise VaultError("The 'radius' authentication type requires 'radius_secret'")
 
-        self.kv_engine_version = kv_engine_version if kv_engine_version else 2
+        self.kv_engine_version = kv_engine_version or 2
         self.url = url
         self.auth_type = auth_type
         self.kwargs = kwargs
@@ -169,12 +174,9 @@ class _VaultClient(LoggingMixin):
     @property
     def client(self):
         """
-        Authentication to Vault can expire. This wrapper function checks that
-        it is still authenticated to Vault, and invalidates the cache if this
-        is not the case.
+        Checks that it is still authenticated to Vault and invalidates the cache if this is not the case.
 
         :return: Vault Client
-
         """
         if not self._client.is_authenticated():
             # Invalidate the cache:
@@ -190,6 +192,22 @@ class _VaultClient(LoggingMixin):
         :return: Vault Client
 
         """
+        if "session" not in self.kwargs:
+            # If no session object provide one with retry as per hvac documentation:
+            # https://hvac.readthedocs.io/en/stable/advanced_usage.html#retrying-failed-requests
+            adapter = HTTPAdapter(
+                max_retries=Retry(
+                    total=3,
+                    backoff_factor=0.1,
+                    status_forcelist=[412, 500, 502, 503],
+                    raise_on_status=False,
+                )
+            )
+            session = Session()
+            session.mount("http://", adapter)
+            session.mount("https://", adapter)
+            self.kwargs["session"] = session
+
         _client = hvac.Client(url=self.url, **self.kwargs)
         if self.auth_type == "approle":
             self._auth_approle(_client)
@@ -221,11 +239,11 @@ class _VaultClient(LoggingMixin):
 
     def _auth_userpass(self, _client: hvac.Client) -> None:
         if self.auth_mount_point:
-            _client.auth_userpass(
+            _client.auth.userpass.login(
                 username=self.username, password=self.password, mount_point=self.auth_mount_point
             )
         else:
-            _client.auth_userpass(username=self.username, password=self.password)
+            _client.auth.userpass.login(username=self.username, password=self.password)
 
     def _auth_radius(self, _client: hvac.Client) -> None:
         if self.auth_mount_point:
@@ -300,14 +318,14 @@ class _VaultClient(LoggingMixin):
 
     def _auth_aws_iam(self, _client: hvac.Client) -> None:
         if self.auth_mount_point:
-            _client.auth_aws_iam(
+            _client.auth.aws.iam_login(
                 access_key=self.key_id,
                 secret_key=self.secret_id,
                 role=self.role_id,
                 mount_point=self.auth_mount_point,
             )
         else:
-            _client.auth_aws_iam(access_key=self.key_id, secret_key=self.secret_id, role=self.role_id)
+            _client.auth.aws.iam_login(access_key=self.key_id, secret_key=self.secret_id, role=self.role_id)
 
     def _auth_approle(self, _client: hvac.Client) -> None:
         if self.auth_mount_point:
@@ -324,6 +342,15 @@ class _VaultClient(LoggingMixin):
         else:
             _client.token = self.token
 
+    def _parse_secret_path(self, secret_path: str) -> tuple[str, str]:
+        if not self.mount_point:
+            split_secret_path = secret_path.split("/", 1)
+            if len(split_secret_path) < 2:
+                raise InvalidPath
+            return split_secret_path[0], split_secret_path[1]
+        else:
+            return self.mount_point, secret_path
+
     def get_secret(self, secret_path: str, secret_version: int | None = None) -> dict | None:
         """
         Get secret value from the KV engine.
@@ -337,19 +364,19 @@ class _VaultClient(LoggingMixin):
 
         :return: secret stored in the vault as a dictionary
         """
+        mount_point = None
         try:
+            mount_point, secret_path = self._parse_secret_path(secret_path)
             if self.kv_engine_version == 1:
                 if secret_version:
                     raise VaultError("Secret version can only be used with version 2 of the KV engine")
-                response = self.client.secrets.kv.v1.read_secret(
-                    path=secret_path, mount_point=self.mount_point
-                )
+                response = self.client.secrets.kv.v1.read_secret(path=secret_path, mount_point=mount_point)
             else:
                 response = self.client.secrets.kv.v2.read_secret_version(
-                    path=secret_path, mount_point=self.mount_point, version=secret_version
+                    path=secret_path, mount_point=mount_point, version=secret_version
                 )
         except InvalidPath:
-            self.log.debug("Secret not found %s with mount point %s", secret_path, self.mount_point)
+            self.log.debug("Secret not found %s with mount point %s", secret_path, mount_point)
             return None
 
         return_data = response["data"] if self.kv_engine_version == 1 else response["data"]["data"]
@@ -367,12 +394,12 @@ class _VaultClient(LoggingMixin):
         """
         if self.kv_engine_version == 1:
             raise VaultError("Metadata might only be used with version 2 of the KV engine.")
+        mount_point = None
         try:
-            return self.client.secrets.kv.v2.read_secret_metadata(
-                path=secret_path, mount_point=self.mount_point
-            )
+            mount_point, secret_path = self._parse_secret_path(secret_path)
+            return self.client.secrets.kv.v2.read_secret_metadata(path=secret_path, mount_point=mount_point)
         except InvalidPath:
-            self.log.debug("Secret not found %s with mount point %s", secret_path, self.mount_point)
+            self.log.debug("Secret not found %s with mount point %s", secret_path, mount_point)
             return None
 
     def get_secret_including_metadata(
@@ -391,15 +418,17 @@ class _VaultClient(LoggingMixin):
         """
         if self.kv_engine_version == 1:
             raise VaultError("Metadata might only be used with version 2 of the KV engine.")
+        mount_point = None
         try:
+            mount_point, secret_path = self._parse_secret_path(secret_path)
             return self.client.secrets.kv.v2.read_secret_version(
-                path=secret_path, mount_point=self.mount_point, version=secret_version
+                path=secret_path, mount_point=mount_point, version=secret_version
             )
         except InvalidPath:
             self.log.debug(
                 "Secret not found %s with mount point %s and version %s",
                 secret_path,
-                self.mount_point,
+                mount_point,
                 secret_version,
             )
             return None
@@ -429,12 +458,13 @@ class _VaultClient(LoggingMixin):
             raise VaultError("The method parameter is only valid for version 1")
         if self.kv_engine_version == 1 and cas:
             raise VaultError("The cas parameter is only valid for version 2")
+        mount_point, secret_path = self._parse_secret_path(secret_path)
         if self.kv_engine_version == 1:
             response = self.client.secrets.kv.v1.create_or_update_secret(
-                secret_path=secret_path, secret=secret, mount_point=self.mount_point, method=method
+                secret_path=secret_path, secret=secret, mount_point=mount_point, method=method
             )
         else:
             response = self.client.secrets.kv.v2.create_or_update_secret(
-                secret_path=secret_path, secret=secret, mount_point=self.mount_point, cas=cas
+                secret_path=secret_path, secret=secret, mount_point=mount_point, cas=cas
             )
         return response

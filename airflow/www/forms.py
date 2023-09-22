@@ -17,8 +17,10 @@
 # under the License.
 from __future__ import annotations
 
+import datetime
 import json
-from datetime import datetime as dt
+import operator
+from typing import Iterator
 
 import pendulum
 from flask_appbuilder.fieldwidgets import (
@@ -34,9 +36,12 @@ from wtforms import widgets
 from wtforms.fields import Field, IntegerField, PasswordField, SelectField, StringField, TextAreaField
 from wtforms.validators import InputRequired, Optional
 
+from airflow.compat.functools import cache
 from airflow.configuration import conf
+from airflow.providers_manager import ProvidersManager
 from airflow.utils import timezone
 from airflow.utils.types import DagRunType
+from airflow.www.validators import ReadOnly, ValidKey
 from airflow.www.widgets import (
     AirflowDateTimePickerROWidget,
     AirflowDateTimePickerWidget,
@@ -70,7 +75,7 @@ class DateTimeWithTimezoneField(Field):
             # Check if the datetime string is in the format without timezone, if so convert it to the
             # default timezone
             if len(date_str) == 19:
-                parsed_datetime = dt.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                parsed_datetime = datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
                 default_timezone = self._get_default_timezone()
                 self.data = default_timezone.convert(parsed_datetime)
             else:
@@ -89,16 +94,13 @@ class DateTimeWithTimezoneField(Field):
 
 
 class DateTimeForm(FlaskForm):
-    """Date filter form needed for task views"""
+    """Date filter form needed for task views."""
 
     execution_date = DateTimeWithTimezoneField("Logical date", widget=AirflowDateTimePickerWidget())
 
 
 class DateTimeWithNumRunsForm(FlaskForm):
-    """
-    Date time and number of runs form for tree view, task duration
-    and landing times
-    """
+    """Date time and number of runs form for tree view, task duration and landing times."""
 
     base_date = DateTimeWithTimezoneField(
         "Anchor date", widget=AirflowDateTimePickerWidget(), default=timezone.utcnow()
@@ -116,47 +118,57 @@ class DateTimeWithNumRunsForm(FlaskForm):
     )
 
 
-class DateTimeWithNumRunsWithDagRunsForm(DateTimeWithNumRunsForm):
-    """Date time and number of runs and dag runs form for graph and gantt view"""
-
-    execution_date = SelectField("DAG run")
-
-
 class DagRunEditForm(DynamicForm):
     """Form for editing DAG Run.
 
-    We don't actually want to allow editing, so everything is read-only here.
+    Only note field is editable, so everything else is read-only here.
     """
 
-    dag_id = StringField(lazy_gettext("Dag Id"), widget=BS3TextFieldROWidget())
-    start_date = DateTimeWithTimezoneField(lazy_gettext("Start Date"), widget=AirflowDateTimePickerROWidget())
-    end_date = DateTimeWithTimezoneField(lazy_gettext("End Date"), widget=AirflowDateTimePickerROWidget())
-    run_id = StringField(lazy_gettext("Run Id"), widget=BS3TextFieldROWidget())
-    state = StringField(lazy_gettext("State"), widget=BS3TextFieldROWidget())
+    dag_id = StringField(lazy_gettext("Dag Id"), validators=[ReadOnly()], widget=BS3TextFieldROWidget())
+    start_date = DateTimeWithTimezoneField(
+        lazy_gettext("Start Date"), validators=[ReadOnly()], widget=AirflowDateTimePickerROWidget()
+    )
+    end_date = DateTimeWithTimezoneField(
+        lazy_gettext("End Date"), validators=[ReadOnly()], widget=AirflowDateTimePickerROWidget()
+    )
+    run_id = StringField(lazy_gettext("Run Id"), validators=[ReadOnly()], widget=BS3TextFieldROWidget())
+    state = StringField(lazy_gettext("State"), validators=[ReadOnly()], widget=BS3TextFieldROWidget())
     execution_date = DateTimeWithTimezoneField(
         lazy_gettext("Logical Date"),
+        validators=[ReadOnly()],
         widget=AirflowDateTimePickerROWidget(),
     )
-    conf = TextAreaField(lazy_gettext("Conf"), widget=BS3TextAreaROWidget())
+    conf = TextAreaField(lazy_gettext("Conf"), validators=[ReadOnly()], widget=BS3TextAreaROWidget())
     note = TextAreaField(lazy_gettext("User Note"), widget=BS3TextAreaFieldWidget())
 
     def populate_obj(self, item):
-        """Populates the attributes of the passed obj with data from the form's fields."""
-        super().populate_obj(item)
+        """Populates the attributes of the passed obj with data from the form's not-read-only fields."""
+        for name, field in self._fields.items():
+            if not field.flags.readonly:
+                field.populate_obj(item, name)
         item.run_type = DagRunType.from_run_id(item.run_id)
         if item.conf:
             item.conf = json.loads(item.conf)
 
 
 class TaskInstanceEditForm(DynamicForm):
-    """Form for editing TaskInstance"""
+    """Form for editing TaskInstance.
 
-    dag_id = StringField(lazy_gettext("Dag Id"), validators=[InputRequired()], widget=BS3TextFieldROWidget())
-    task_id = StringField(
-        lazy_gettext("Task Id"), validators=[InputRequired()], widget=BS3TextFieldROWidget()
+    Only note and state fields are editable, so everything else is read-only here.
+    """
+
+    dag_id = StringField(
+        lazy_gettext("Dag Id"), validators=[InputRequired(), ReadOnly()], widget=BS3TextFieldROWidget()
     )
-    start_date = DateTimeWithTimezoneField(lazy_gettext("Start Date"), widget=AirflowDateTimePickerROWidget())
-    end_date = DateTimeWithTimezoneField(lazy_gettext("End Date"), widget=AirflowDateTimePickerROWidget())
+    task_id = StringField(
+        lazy_gettext("Task Id"), validators=[InputRequired(), ReadOnly()], widget=BS3TextFieldROWidget()
+    )
+    start_date = DateTimeWithTimezoneField(
+        lazy_gettext("Start Date"), validators=[ReadOnly()], widget=AirflowDateTimePickerROWidget()
+    )
+    end_date = DateTimeWithTimezoneField(
+        lazy_gettext("End Date"), validators=[ReadOnly()], widget=AirflowDateTimePickerROWidget()
+    )
     state = SelectField(
         lazy_gettext("State"),
         choices=(
@@ -171,22 +183,66 @@ class TaskInstanceEditForm(DynamicForm):
     execution_date = DateTimeWithTimezoneField(
         lazy_gettext("Logical Date"),
         widget=AirflowDateTimePickerROWidget(),
-        validators=[InputRequired()],
+        validators=[InputRequired(), ReadOnly()],
     )
     note = TextAreaField(lazy_gettext("User Note"), widget=BS3TextAreaFieldWidget())
 
+    def populate_obj(self, item):
+        """Populates the attributes of the passed obj with data from the form's not-read-only fields."""
+        for name, field in self._fields.items():
+            if not field.flags.readonly:
+                field.populate_obj(item, name)
 
-class ConnectionForm(DynamicForm):
-    """Form for editing and adding Connection"""
 
-    conn_id = StringField(
-        lazy_gettext("Connection Id"), validators=[InputRequired()], widget=BS3TextFieldWidget()
-    )
-    # conn_type is added later via lazy_add_provider_discovered_options_to_connection_form
-    description = StringField(lazy_gettext("Description"), widget=BS3TextAreaFieldWidget())
-    host = StringField(lazy_gettext("Host"), widget=BS3TextFieldWidget())
-    schema = StringField(lazy_gettext("Schema"), widget=BS3TextFieldWidget())
-    login = StringField(lazy_gettext("Login"), widget=BS3TextFieldWidget())
-    password = PasswordField(lazy_gettext("Password"), widget=BS3PasswordFieldWidget())
-    port = IntegerField(lazy_gettext("Port"), validators=[Optional()], widget=BS3TextFieldWidget())
-    extra = TextAreaField(lazy_gettext("Extra"), widget=BS3TextAreaFieldWidget())
+@cache
+def create_connection_form_class() -> type[DynamicForm]:
+    """Create a form class for editing and adding Connection.
+
+    This class is created dynamically because it relies heavily on run-time
+    provider discovery, which slows down webserver startup a lot.
+    By creating the class at runtime, we can delay loading the providers until
+    when the connection form is first used, which may as well be never for a
+    short-lived server.
+    """
+    providers_manager = ProvidersManager()
+
+    def _iter_connection_types() -> Iterator[tuple[str, str]]:
+        """List available connection types."""
+        for connection_type, provider_info in providers_manager.hooks.items():
+            if provider_info:
+                yield (connection_type, provider_info.hook_name)
+
+    class ConnectionForm(DynamicForm):
+        def process(self, formdata=None, obj=None, **kwargs):
+            super().process(formdata=formdata, obj=obj, **kwargs)
+            for field in self._fields.values():
+                if isinstance(getattr(field, "data", None), str):
+                    field.data = field.data.strip()
+
+        conn_id = StringField(
+            lazy_gettext("Connection Id"),
+            validators=[InputRequired(), ValidKey()],
+            widget=BS3TextFieldWidget(),
+        )
+        conn_type = SelectField(
+            lazy_gettext("Connection Type"),
+            choices=sorted(_iter_connection_types(), key=operator.itemgetter(1)),
+            widget=Select2Widget(),
+            validators=[InputRequired()],
+            description=(
+                "Connection Type missing? Make sure you've installed the "
+                "corresponding Airflow Provider Package."
+            ),
+        )
+        description = StringField(lazy_gettext("Description"), widget=BS3TextAreaFieldWidget())
+        host = StringField(lazy_gettext("Host"), widget=BS3TextFieldWidget())
+        schema = StringField(lazy_gettext("Schema"), widget=BS3TextFieldWidget())
+        login = StringField(lazy_gettext("Login"), widget=BS3TextFieldWidget())
+        password = PasswordField(lazy_gettext("Password"), widget=BS3PasswordFieldWidget())
+        port = IntegerField(lazy_gettext("Port"), validators=[Optional()], widget=BS3TextFieldWidget())
+        extra = TextAreaField(lazy_gettext("Extra"), widget=BS3TextAreaFieldWidget())
+
+    for key, value in providers_manager.connection_form_widgets.items():
+        setattr(ConnectionForm, key, value.field)
+
+    return ConnectionForm

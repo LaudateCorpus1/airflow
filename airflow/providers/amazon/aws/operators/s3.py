@@ -37,7 +37,7 @@ BUCKET_DOES_NOT_EXIST_MSG = "Bucket with name: %s doesn't exist"
 
 class S3CreateBucketOperator(BaseOperator):
     """
-    This operator creates an S3 bucket
+    This operator creates an S3 bucket.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -78,7 +78,7 @@ class S3CreateBucketOperator(BaseOperator):
 
 class S3DeleteBucketOperator(BaseOperator):
     """
-    This operator deletes an S3 bucket
+    This operator deletes an S3 bucket.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -118,7 +118,7 @@ class S3DeleteBucketOperator(BaseOperator):
 
 class S3GetBucketTaggingOperator(BaseOperator):
     """
-    This operator gets tagging from an S3 bucket
+    This operator gets tagging from an S3 bucket.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -331,10 +331,10 @@ class S3CreateObjectOperator(BaseOperator):
         :ref:`howto/operator:S3CreateObjectOperator`
 
     :param s3_bucket: Name of the S3 bucket where to save the object. (templated)
-        It should be omitted when `bucket_key` is provided as a full s3:// url.
+        It should be omitted when ``s3_key`` is provided as a full s3:// url.
     :param s3_key: The key of the object to be created. (templated)
         It can be either full s3:// style url or relative path from root level.
-        When it's specified as a full s3:// url, please omit bucket_name.
+        When it's specified as a full s3:// url, please omit ``s3_bucket``.
     :param data: string or bytes to save as content.
     :param replace: If True, it will overwrite the key if it already exists
     :param encrypt: If True, the file will be encrypted on the server-side
@@ -412,8 +412,7 @@ class S3CreateObjectOperator(BaseOperator):
 
 class S3DeleteObjectsOperator(BaseOperator):
     """
-    To enable users to delete single object or multiple objects from
-    a bucket using a single HTTP request.
+    To enable users to delete single object or multiple objects from a bucket using a single HTTP request.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -471,7 +470,7 @@ class S3DeleteObjectsOperator(BaseOperator):
         if not exactly_one(self.keys is None, self.prefix is None):
             raise AirflowException("Either keys or prefix should be set.")
 
-        if isinstance(self.keys, (list, str)) and not bool(self.keys):
+        if isinstance(self.keys, (list, str)) and not self.keys:
             return
         s3_hook = S3Hook(aws_conn_id=self.aws_conn_id, verify=self.verify)
 
@@ -482,10 +481,10 @@ class S3DeleteObjectsOperator(BaseOperator):
 
 class S3FileTransformOperator(BaseOperator):
     """
-    Copies data from a source S3 location to a temporary location on the
-    local filesystem. Runs a transformation on this file as specified by
-    the transformation script and uploads the output to a destination S3
-    location.
+    Copies data from a source S3 location to a temporary location on the local filesystem.
+
+    Runs a transformation on this file as specified by the transformation
+    script and uploads the output to a destination S3 location.
 
     The locations of the source and the destination files in the local
     filesystem is provided as a first and second arguments to the
@@ -628,6 +627,7 @@ class S3ListOperator(BaseOperator):
     :param delimiter: the delimiter marks key hierarchy. (templated)
     :param aws_conn_id: The connection ID to use when connecting to S3 storage.
     :param verify: Whether or not to verify SSL certificates for S3 connection.
+    :param apply_wildcard: whether to treat '*' as a wildcard or a plain symbol in the prefix.
         By default SSL certificates are verified.
         You can provide the following values:
 
@@ -664,6 +664,7 @@ class S3ListOperator(BaseOperator):
         delimiter: str = "",
         aws_conn_id: str = "aws_default",
         verify: str | bool | None = None,
+        apply_wildcard: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -672,6 +673,7 @@ class S3ListOperator(BaseOperator):
         self.delimiter = delimiter
         self.aws_conn_id = aws_conn_id
         self.verify = verify
+        self.apply_wildcard = apply_wildcard
 
     def execute(self, context: Context):
         hook = S3Hook(aws_conn_id=self.aws_conn_id, verify=self.verify)
@@ -683,7 +685,12 @@ class S3ListOperator(BaseOperator):
             self.delimiter,
         )
 
-        return hook.list_keys(bucket_name=self.bucket, prefix=self.prefix, delimiter=self.delimiter)
+        return hook.list_keys(
+            bucket_name=self.bucket,
+            prefix=self.prefix,
+            delimiter=self.delimiter,
+            apply_wildcard=self.apply_wildcard,
+        )
 
 
 class S3ListPrefixesOperator(BaseOperator):

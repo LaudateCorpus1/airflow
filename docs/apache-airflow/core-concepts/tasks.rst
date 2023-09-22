@@ -76,7 +76,6 @@ The possible states for a Task Instance are:
 * ``queued``: The task has been assigned to an Executor and is awaiting a worker
 * ``running``: The task is running on a worker (or on a local/synchronous executor)
 * ``success``: The task finished running without errors
-* ``shutdown``: The task was externally requested to shut down when it was running
 * ``restarting``: The task was externally requested to restart when it was running
 * ``failed``: The task had an error during execution and failed to run
 * ``skipped``: The task was skipped due to branching, LatestOnly, or similar.
@@ -237,6 +236,7 @@ If you want to control your task's state from within custom Task/Operator code, 
 
 These can be useful if your code has extra knowledge about its environment and wants to fail/skip faster - e.g., skipping when it knows there's no data available, or fast-failing when it detects its API key is invalid (as that will not be fixed by a retry).
 
+.. _concepts:zombies:
 
 Zombie/Undead Tasks
 -------------------

@@ -16,13 +16,18 @@
 # under the License.
 from __future__ import annotations
 
+from datetime import timedelta
+from functools import cached_property
 from typing import TYPE_CHECKING, Sequence
 
+from airflow.configuration import conf
+from airflow.exceptions import AirflowException, AirflowSkipException
 from airflow.providers.microsoft.azure.hooks.data_factory import (
     AzureDataFactoryHook,
     AzureDataFactoryPipelineRunException,
     AzureDataFactoryPipelineRunStatus,
 )
+from airflow.providers.microsoft.azure.triggers.data_factory import ADFPipelineRunStatusSensorTrigger
 from airflow.sensors.base import BaseSensorOperator
 
 if TYPE_CHECKING:
@@ -37,6 +42,7 @@ class AzureDataFactoryPipelineRunStatusSensor(BaseSensorOperator):
     :param run_id: The pipeline run identifier.
     :param resource_group_name: The resource group name.
     :param factory_name: The data factory name.
+    :param deferrable: Run sensor in the deferrable mode.
     """
 
     template_fields: Sequence[str] = (
@@ -55,6 +61,7 @@ class AzureDataFactoryPipelineRunStatusSensor(BaseSensorOperator):
         azure_data_factory_conn_id: str = AzureDataFactoryHook.default_conn_name,
         resource_group_name: str | None = None,
         factory_name: str | None = None,
+        deferrable: bool = conf.getboolean("operators", "default_deferrable", fallback=False),
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -63,8 +70,14 @@ class AzureDataFactoryPipelineRunStatusSensor(BaseSensorOperator):
         self.resource_group_name = resource_group_name
         self.factory_name = factory_name
 
+        self.deferrable = deferrable
+
+    @cached_property
+    def hook(self):
+        """Create and return an AzureDataFactoryHook (cached)."""
+        return AzureDataFactoryHook(azure_data_factory_conn_id=self.azure_data_factory_conn_id)
+
     def poke(self, context: Context) -> bool:
-        self.hook = AzureDataFactoryHook(azure_data_factory_conn_id=self.azure_data_factory_conn_id)
         pipeline_run_status = self.hook.get_pipeline_run_status(
             run_id=self.run_id,
             resource_group_name=self.resource_group_name,
@@ -72,9 +85,54 @@ class AzureDataFactoryPipelineRunStatusSensor(BaseSensorOperator):
         )
 
         if pipeline_run_status == AzureDataFactoryPipelineRunStatus.FAILED:
-            raise AzureDataFactoryPipelineRunException(f"Pipeline run {self.run_id} has failed.")
+            # TODO: remove this if check when min_airflow_version is set to higher than 2.7.1
+            message = f"Pipeline run {self.run_id} has failed."
+            if self.soft_fail:
+                raise AirflowSkipException(message)
+            raise AzureDataFactoryPipelineRunException(message)
 
         if pipeline_run_status == AzureDataFactoryPipelineRunStatus.CANCELLED:
-            raise AzureDataFactoryPipelineRunException(f"Pipeline run {self.run_id} has been cancelled.")
+            # TODO: remove this if check when min_airflow_version is set to higher than 2.7.1
+            message = f"Pipeline run {self.run_id} has been cancelled."
+            if self.soft_fail:
+                raise AirflowSkipException(message)
+            raise AzureDataFactoryPipelineRunException(message)
 
         return pipeline_run_status == AzureDataFactoryPipelineRunStatus.SUCCEEDED
+
+    def execute(self, context: Context) -> None:
+        """Poll for state of the job run.
+
+        In deferrable mode, the polling is deferred to the triggerer. Otherwise
+        the sensor waits synchronously.
+        """
+        if not self.deferrable:
+            super().execute(context=context)
+        else:
+            if not self.poke(context=context):
+                self.defer(
+                    timeout=timedelta(seconds=self.timeout),
+                    trigger=ADFPipelineRunStatusSensorTrigger(
+                        run_id=self.run_id,
+                        azure_data_factory_conn_id=self.azure_data_factory_conn_id,
+                        resource_group_name=self.resource_group_name,
+                        factory_name=self.factory_name,
+                        poke_interval=self.poke_interval,
+                    ),
+                    method_name="execute_complete",
+                )
+
+    def execute_complete(self, context: Context, event: dict[str, str]) -> None:
+        """
+        Callback for when the trigger fires - returns immediately.
+
+        Relies on trigger to throw an exception, otherwise it assumes execution was successful.
+        """
+        if event:
+            if event["status"] == "error":
+                # TODO: remove this if check when min_airflow_version is set to higher than 2.7.1
+                if self.soft_fail:
+                    raise AirflowSkipException(event["message"])
+                raise AirflowException(event["message"])
+            self.log.info(event["message"])
+        return None

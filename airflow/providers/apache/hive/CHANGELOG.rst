@@ -21,8 +21,158 @@
    and you want to add an explanation to the users on how they are supposed to deal with them.
    The changelog is updated and maintained semi-automatically by release manager.
 
+``apache-airflow-providers-apache-hive``
+
+
 Changelog
 ---------
+
+6.1.6
+.....
+
+Misc
+~~~~
+
+* ``Refactor regex in providers (#33898)``
+* ``Replace sequence concatenation by unpacking in Airflow providers (#33933)``
+* ``Replace single element slice by next() in hive provider (#33937)``
+* ``Use a single  statement with multiple contexts instead of nested  statements in providers (#33768)``
+* ``Use startswith once with a tuple in Hive hook (#33765)``
+* ``Refactor: Simplify a few loops (#33736)``
+* ``E731: replace lambda by a def method in Airflow providers (#33757)``
+* ``Use f-string instead of  in Airflow providers (#33752)``
+
+6.1.5
+.....
+
+.. note::
+  The provider now uses pure-sasl, a pure-Python implementation of SASL,
+  which is better maintained than previous sasl implementation, even
+  if a bit slower for sasl interface. It also allows hive to be
+  installed for Python 3.11.
+
+Misc
+~~~~
+
+* ``Bring back hive support for Python 3.11 (#32607)``
+* ``Refactor: Simplify code in Apache/Alibaba providers (#33227)``
+* ``Simplify 'X for X in Y' to 'Y' where applicable (#33453)``
+* ``Replace OrderedDict with plain dict (#33508)``
+* ``Simplify code around enumerate (#33476)``
+* ``Use str.splitlines() to split lines in providers (#33593)``
+* ``Simplify conditions on len() in providers/apache (#33564)``
+* ``Replace repr() with proper formatting (#33520)``
+* ``Avoid importing pandas and numpy in runtime and module level (#33483)``
+* ``Consolidate import and usage of pandas (#33480)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``D401 Support - Providers: Airbyte to Atlassian (Inclusive) (#33354)``
+
+6.1.4
+.....
+
+Misc
+~~~~
+
+* ``Bring back mysql-connector-python as required depednency (#32989)``
+
+6.1.3
+.....
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix Pandas2 compatibility for Hive (#32752)``
+
+Misc
+~~~~
+
+* ``Add more accurate typing for DbApiHook.run method (#31846)``
+* ``Move Hive configuration to Apache Hive provider (#32777)``
+
+
+6.1.2
+.....
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Add proxy_user template check (#32334)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Remove spurious headers for provider changelogs (#32373)``
+   * ``Prepare docs for July 2023 wave of Providers (#32298)``
+   * ``D205 Support - Providers: Apache to Common (inclusive) (#32226)``
+   * ``Improve provider documentation and README structure (#32125)``
+
+6.1.1
+.....
+
+.. note::
+  This release dropped support for Python 3.7
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Sanitize beeline principal parameter (#31983)``
+
+Misc
+~~~~
+
+* ``Replace unicodecsv with standard csv library (#31693)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+
+   * ``Apache provider docstring improvements (#31730)``
+   * ``Improve docstrings in providers (#31681)``
+   * ``Add D400 pydocstyle check - Apache providers only (#31424)``
+   * ``Add Python 3.11 support (#27264)``
+   * ``Add note about dropping Python 3.7 for providers (#32015)``
+
+6.1.0
+.....
+
+.. note::
+  This release of provider is only available for Airflow 2.4+ as explained in the
+  `Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/PROVIDERS.rst#minimum-supported-version-of-airflow-for-community-managed-providers>`_.
+
+Misc
+~~~~
+
+* ``Bump minimum Airflow version in providers (#30917)``
+* ``Update return types of 'get_key' methods on 'S3Hook' (#30923)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Add full automation for min Airflow version for providers (#30994)``
+   * ``Add mechanism to suspend providers (#30422)``
+   * ``Use 'AirflowProviderDeprecationWarning' in providers (#30975)``
+   * ``Decouple "job runner" from BaseJob ORM model (#30255)``
+   * ``Use '__version__' in providers not 'version' (#31393)``
+   * ``Fixing circular import error in providers caused by airflow version check (#31379)``
+   * ``Prepare docs for May 2023 wave of Providers (#31252)``
+
+6.0.0
+.....
+
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+The auth option is moved from the extra field to the auth parameter in the Hook. If you have extra
+parameters defined in your connections as auth, you should move them to the DAG where your HiveOperator
+or other Hive related operators are used.
+
+* ``Move auth parameter from extra to Hook parameter (#30212)``
+
+5.1.3
+.....
+
+Bug Fixes
+~~~~~~~~~
+* ``Validate Hive Beeline parameters (#29502)``
 
 5.1.2
 .....
@@ -93,8 +243,9 @@ Bug Fixes
 4.1.0
 .....
 
-This release of provider is only available for Airflow 2.3+ as explained in the
-`Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/README.md#support-for-providers>`_.
+.. note::
+  This release of provider is only available for Airflow 2.3+ as explained in the
+  `Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/PROVIDERS.rst#minimum-supported-version-of-airflow-for-community-managed-providers>`_.
 
 Misc
 ~~~~
@@ -164,8 +315,9 @@ Bug Fixes
 Breaking changes
 ~~~~~~~~~~~~~~~~
 
-* This release of provider is only available for Airflow 2.2+ as explained in the Apache Airflow
-  providers support policy https://github.com/apache/airflow/blob/main/README.md#support-for-providers
+.. note::
+  This release of provider is only available for Airflow 2.2+ as explained in the
+  `Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/PROVIDERS.rst#minimum-supported-version-of-airflow-for-community-managed-providers>`_.
 
 Misc
 ~~~~

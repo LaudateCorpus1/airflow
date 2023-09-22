@@ -18,21 +18,23 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Iterator
+from functools import cached_property
+from typing import TYPE_CHECKING, Iterator
 
-from sqlalchemy.orm.session import Session
-
-from airflow.compat.functools import cached_property
 from airflow.configuration import conf
-from airflow.models.taskinstance import TaskInstance
 from airflow.utils.helpers import render_log_filename
 from airflow.utils.log.logging_mixin import ExternalLoggingMixin
 from airflow.utils.session import NEW_SESSION, provide_session
-from airflow.utils.state import State
+from airflow.utils.state import TaskInstanceState
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm.session import Session
+
+    from airflow.models.taskinstance import TaskInstance
 
 
 class TaskLogReader:
-    """Task log reader"""
+    """Task log reader."""
 
     STREAM_LOOP_SLEEP_SECONDS = 0.5
     """Time to sleep between loops while waiting for more logs"""
@@ -41,7 +43,7 @@ class TaskLogReader:
         self, ti: TaskInstance, try_number: int | None, metadata
     ) -> tuple[list[tuple[tuple[str, str]]], dict[str, str]]:
         """
-        Reads chunks of Task Instance logs.
+        Read chunks of Task Instance logs.
 
         :param ti: The taskInstance
         :param try_number: If provided, logs for the given try will be returned.
@@ -65,7 +67,7 @@ class TaskLogReader:
 
     def read_log_stream(self, ti: TaskInstance, try_number: int | None, metadata: dict) -> Iterator[str]:
         """
-        Used to continuously read log to the end
+        Continuously read log to the end.
 
         :param ti: The Task Instance
         :param try_number: the task try number
@@ -86,7 +88,8 @@ class TaskLogReader:
                 for host, log in logs[0]:
                     yield "\n".join([host or "", log]) + "\n"
                 if "end_of_log" not in metadata or (
-                    not metadata["end_of_log"] and ti.state not in [State.RUNNING, State.DEFERRED]
+                    not metadata["end_of_log"]
+                    and ti.state not in (TaskInstanceState.RUNNING, TaskInstanceState.DEFERRED)
                 ):
                     if not logs[0]:
                         # we did not receive any logs in this loop
@@ -97,11 +100,19 @@ class TaskLogReader:
 
     @cached_property
     def log_handler(self):
-        """Log handler, which is configured to read logs."""
-        logger = logging.getLogger("airflow.task")
+        """Get the log handler which is configured to read logs."""
         task_log_reader = conf.get("logging", "task_log_reader")
-        handler = next((handler for handler in logger.handlers if handler.name == task_log_reader), None)
-        return handler
+
+        def handlers():
+            """
+            Yield all handlers first from airflow.task logger then root logger.
+
+            Depending on whether we're in a running task, it could be in either of these locations.
+            """
+            yield from logging.getLogger("airflow.task").handlers
+            yield from logging.getLogger().handlers
+
+        return next((h for h in handlers() if h.name == task_log_reader), None)
 
     @property
     def supports_read(self):
@@ -125,7 +136,7 @@ class TaskLogReader:
         session: Session = NEW_SESSION,
     ) -> str:
         """
-        Renders the log attachment filename
+        Render the log attachment filename.
 
         :param ti: The task instance
         :param try_number: The task try number

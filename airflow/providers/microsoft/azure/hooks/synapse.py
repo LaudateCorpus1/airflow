@@ -17,15 +17,17 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from azure.identity import ClientSecretCredential, DefaultAzureCredential
 from azure.synapse.spark import SparkClient
-from azure.synapse.spark.models import SparkBatchJobOptions
 
 from airflow.exceptions import AirflowTaskTimeout
 from airflow.hooks.base import BaseHook
 from airflow.providers.microsoft.azure.utils import get_field
+
+if TYPE_CHECKING:
+    from azure.synapse.spark.models import SparkBatchJobOptions
 
 Credentials = Union[ClientSecretCredential, DefaultAzureCredential]
 
@@ -62,7 +64,7 @@ class AzureSynapseHook(BaseHook):
 
     @staticmethod
     def get_connection_form_widgets() -> dict[str, Any]:
-        """Returns connection widgets to add to connection form"""
+        """Returns connection widgets to add to connection form."""
         from flask_appbuilder.fieldwidgets import BS3TextFieldWidget
         from flask_babel import lazy_gettext
         from wtforms import StringField
@@ -74,7 +76,7 @@ class AzureSynapseHook(BaseHook):
 
     @staticmethod
     def get_ui_field_behaviour() -> dict[str, Any]:
-        """Returns custom field behaviour"""
+        """Returns custom field behaviour."""
         return {
             "hidden_fields": ["schema", "port", "extra"],
             "relabeling": {"login": "Client ID", "password": "Secret", "host": "Synapse Workspace URL"},
@@ -140,6 +142,7 @@ class AzureSynapseHook(BaseHook):
     ):
         """
         Run a job in an Apache Spark pool.
+
         :param payload: Livy compatible payload which represents the spark job that a user wants to submit.
         """
         job = self.get_conn().spark_batch.create_spark_batch_job(payload)
@@ -182,7 +185,7 @@ class AzureSynapseHook(BaseHook):
                 )
 
             # Wait to check the status of the job run based on the ``check_interval`` configured.
-            self.log.info("Sleeping for %s seconds", str(check_interval))
+            self.log.info("Sleeping for %s seconds", check_interval)
             time.sleep(check_interval)
 
             job_run_status = self.get_job_run_status()
@@ -196,6 +199,7 @@ class AzureSynapseHook(BaseHook):
     ) -> None:
         """
         Cancel the spark job run.
+
         :param job_id: The synapse spark job identifier.
         """
         self.get_conn().spark_batch.cancel_spark_batch_job(job_id)

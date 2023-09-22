@@ -21,8 +21,8 @@ from unittest.mock import ANY
 
 import pytest
 
-from airflow import AirflowException
 from airflow.configuration import conf
+from airflow.exceptions import AirflowException
 from airflow.providers.amazon.aws.hooks.glue import GlueJobHook
 from airflow.providers.amazon.aws.sensors.glue import GlueJobSensor
 
@@ -69,8 +69,7 @@ class TestGlueJobSensor:
         mock_print_job_logs.assert_called_once_with(
             job_name=job_name,
             run_id=job_run_id,
-            job_failed=False,
-            next_token=ANY,
+            continuation_tokens=ANY,
         )
 
     @mock.patch.object(GlueJobHook, "print_job_logs")
@@ -111,8 +110,7 @@ class TestGlueJobSensor:
         mock_print_job_logs.assert_called_once_with(
             job_name=job_name,
             run_id=job_run_id,
-            job_failed=False,
-            next_token=ANY,
+            continuation_tokens=ANY,
         )
 
     @mock.patch.object(GlueJobHook, "print_job_logs")

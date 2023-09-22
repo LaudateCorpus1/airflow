@@ -20,8 +20,8 @@ import base64
 import inspect
 import os
 import pickle
+import textwrap
 from tempfile import TemporaryDirectory
-from textwrap import dedent
 from typing import TYPE_CHECKING, Callable, Sequence
 
 import dill
@@ -77,11 +77,7 @@ class _DockerDecoratedOperator(DecoratedOperator, DockerOperator):
 
     custom_operator_name = "@task.docker"
 
-    template_fields: Sequence[str] = ("op_args", "op_kwargs")
-
-    # since we won't mutate the arguments, we should just do the shallow copy
-    # there are some cases we can't deepcopy the objects (e.g protobuf).
-    shallow_copy_attrs: Sequence[str] = ("python_callable",)
+    template_fields: Sequence[str] = (*DockerOperator.template_fields, "op_args", "op_kwargs")
 
     def __init__(
         self,
@@ -90,7 +86,7 @@ class _DockerDecoratedOperator(DecoratedOperator, DockerOperator):
         expect_airflow: bool = True,
         **kwargs,
     ) -> None:
-        command = "dummy command"
+        command = "placeholder command"
         self.python_command = python_command
         self.expect_airflow = expect_airflow
         self.pickling_library = dill if use_dill else pickle
@@ -114,17 +110,17 @@ class _DockerDecoratedOperator(DecoratedOperator, DockerOperator):
             with open(input_filename, "wb") as file:
                 if self.op_args or self.op_kwargs:
                     self.pickling_library.dump({"args": self.op_args, "kwargs": self.op_kwargs}, file)
-            py_source = self._get_python_source()
+            py_source = self.get_python_source()
             write_python_script(
-                jinja_context=dict(
-                    op_args=self.op_args,
-                    op_kwargs=self.op_kwargs,
-                    pickling_library=self.pickling_library.__name__,
-                    python_callable=self.python_callable.__name__,
-                    python_callable_source=py_source,
-                    expect_airflow=self.expect_airflow,
-                    string_args_global=False,
-                ),
+                jinja_context={
+                    "op_args": self.op_args,
+                    "op_kwargs": self.op_kwargs,
+                    "pickling_library": self.pickling_library.__name__,
+                    "python_callable": self.python_callable.__name__,
+                    "python_callable_source": py_source,
+                    "expect_airflow": self.expect_airflow,
+                    "string_args_global": False,
+                },
                 filename=script_filename,
             )
 
@@ -140,10 +136,11 @@ class _DockerDecoratedOperator(DecoratedOperator, DockerOperator):
             self.command = self.generate_command()
             return super().execute(context)
 
-    def _get_python_source(self):
+    # TODO: Remove me once this provider min supported Airflow version is 2.6
+    def get_python_source(self):
         raw_source = inspect.getsource(self.python_callable)
-        res = dedent(raw_source)
-        res = remove_task_decorator(res, "@task.docker")
+        res = textwrap.dedent(raw_source)
+        res = remove_task_decorator(res, self.custom_operator_name)
         return res
 
 
@@ -153,7 +150,8 @@ def docker_task(
     **kwargs,
 ) -> TaskDecorator:
     """
-    Python operator decorator. Wraps a function into an Airflow operator.
+    Python operator decorator; wraps a function into an Airflow operator.
+
     Also accepts any argument that DockerOperator will via ``kwargs``. Can be reused in a single DAG.
 
     :param python_callable: Function to decorate

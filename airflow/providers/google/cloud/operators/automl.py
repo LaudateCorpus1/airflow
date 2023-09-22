@@ -19,10 +19,10 @@
 from __future__ import annotations
 
 import ast
+import warnings
 from typing import TYPE_CHECKING, Sequence, Tuple
 
 from google.api_core.gapic_v1.method import DEFAULT, _MethodDefault
-from google.api_core.retry import Retry
 from google.cloud.automl_v1beta1 import (
     BatchPredictResult,
     ColumnSpec,
@@ -32,7 +32,7 @@ from google.cloud.automl_v1beta1 import (
     TableSpec,
 )
 
-from airflow.models import BaseOperator
+from airflow.exceptions import AirflowProviderDeprecationWarning
 from airflow.providers.google.cloud.hooks.automl import CloudAutoMLHook
 from airflow.providers.google.cloud.links.automl import (
     AutoMLDatasetLink,
@@ -41,16 +41,23 @@ from airflow.providers.google.cloud.links.automl import (
     AutoMLModelPredictLink,
     AutoMLModelTrainLink,
 )
+from airflow.providers.google.cloud.operators.cloud_base import GoogleCloudBaseOperator
 
 if TYPE_CHECKING:
+    from google.api_core.retry import Retry
+
     from airflow.utils.context import Context
 
 MetaData = Sequence[Tuple[str, str]]
 
 
-class AutoMLTrainModelOperator(BaseOperator):
+class AutoMLTrainModelOperator(GoogleCloudBaseOperator):
     """
     Creates Google Cloud AutoML model.
+
+    AutoMLTrainModelOperator for text prediction is deprecated. Please use
+    :class:`airflow.providers.google.cloud.operators.vertex_ai.auto_ml.CreateAutoMLTextTrainingJobOperator`
+    instead.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -101,7 +108,6 @@ class AutoMLTrainModelOperator(BaseOperator):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-
         self.model = model
         self.location = location
         self.project_id = project_id
@@ -112,11 +118,25 @@ class AutoMLTrainModelOperator(BaseOperator):
         self.impersonation_chain = impersonation_chain
 
     def execute(self, context: Context):
+        # Output warning if running AutoML Natural Language prediction job
+        automl_nl_model_keys = [
+            "text_classification_model_metadata",
+            "text_extraction_model_metadata",
+            "text_sentiment_dataset_metadata",
+        ]
+        if any(key in automl_nl_model_keys for key in self.model):
+            warnings.warn(
+                "AutoMLTrainModelOperator for text prediction is deprecated. All the functionality of legacy "
+                "AutoML Natural Language and new features are available on the Vertex AI platform. "
+                "Please use `CreateAutoMLTextTrainingJobOperator`",
+                AirflowProviderDeprecationWarning,
+                stacklevel=2,
+            )
         hook = CloudAutoMLHook(
             gcp_conn_id=self.gcp_conn_id,
             impersonation_chain=self.impersonation_chain,
         )
-        self.log.info("Creating model.")
+        self.log.info("Creating model %s...", self.model["display_name"])
         operation = hook.create_model(
             model=self.model,
             location=self.location,
@@ -128,9 +148,10 @@ class AutoMLTrainModelOperator(BaseOperator):
         project_id = self.project_id or hook.project_id
         if project_id:
             AutoMLModelTrainLink.persist(context=context, task_instance=self, project_id=project_id)
-        result = Model.to_dict(operation.result())
+        operation_result = hook.wait_for_operation(timeout=self.timeout, operation=operation)
+        result = Model.to_dict(operation_result)
         model_id = hook.extract_object_id(result)
-        self.log.info("Model created: %s", model_id)
+        self.log.info("Model is created, model_id: %s", model_id)
 
         self.xcom_push(context, key="model_id", value=model_id)
         if project_id:
@@ -144,7 +165,7 @@ class AutoMLTrainModelOperator(BaseOperator):
         return result
 
 
-class AutoMLPredictOperator(BaseOperator):
+class AutoMLPredictOperator(GoogleCloudBaseOperator):
     """
     Runs prediction operation on Google Cloud AutoML.
 
@@ -236,7 +257,7 @@ class AutoMLPredictOperator(BaseOperator):
         return PredictResponse.to_dict(result)
 
 
-class AutoMLBatchPredictOperator(BaseOperator):
+class AutoMLBatchPredictOperator(GoogleCloudBaseOperator):
     """
     Perform a batch prediction on Google Cloud AutoML.
 
@@ -332,8 +353,9 @@ class AutoMLBatchPredictOperator(BaseOperator):
             timeout=self.timeout,
             metadata=self.metadata,
         )
-        result = BatchPredictResult.to_dict(operation.result())
-        self.log.info("Batch prediction ready.")
+        operation_result = hook.wait_for_operation(timeout=self.timeout, operation=operation)
+        result = BatchPredictResult.to_dict(operation_result)
+        self.log.info("Batch prediction is ready.")
         project_id = self.project_id or hook.project_id
         if project_id:
             AutoMLModelPredictLink.persist(
@@ -345,7 +367,7 @@ class AutoMLBatchPredictOperator(BaseOperator):
         return result
 
 
-class AutoMLCreateDatasetOperator(BaseOperator):
+class AutoMLCreateDatasetOperator(GoogleCloudBaseOperator):
     """
     Creates a Google Cloud AutoML dataset.
 
@@ -412,7 +434,7 @@ class AutoMLCreateDatasetOperator(BaseOperator):
             gcp_conn_id=self.gcp_conn_id,
             impersonation_chain=self.impersonation_chain,
         )
-        self.log.info("Creating dataset")
+        self.log.info("Creating dataset %s...", self.dataset)
         result = hook.create_dataset(
             dataset=self.dataset,
             location=self.location,
@@ -437,7 +459,7 @@ class AutoMLCreateDatasetOperator(BaseOperator):
         return result
 
 
-class AutoMLImportDataOperator(BaseOperator):
+class AutoMLImportDataOperator(GoogleCloudBaseOperator):
     """
     Imports data to a Google Cloud AutoML dataset.
 
@@ -508,7 +530,7 @@ class AutoMLImportDataOperator(BaseOperator):
             gcp_conn_id=self.gcp_conn_id,
             impersonation_chain=self.impersonation_chain,
         )
-        self.log.info("Importing dataset")
+        self.log.info("Importing data to dataset...")
         operation = hook.import_data(
             dataset_id=self.dataset_id,
             input_config=self.input_config,
@@ -518,8 +540,8 @@ class AutoMLImportDataOperator(BaseOperator):
             timeout=self.timeout,
             metadata=self.metadata,
         )
-        operation.result()
-        self.log.info("Import completed")
+        hook.wait_for_operation(timeout=self.timeout, operation=operation)
+        self.log.info("Import is completed")
         project_id = self.project_id or hook.project_id
         if project_id:
             AutoMLDatasetLink.persist(
@@ -530,7 +552,7 @@ class AutoMLImportDataOperator(BaseOperator):
             )
 
 
-class AutoMLTablesListColumnSpecsOperator(BaseOperator):
+class AutoMLTablesListColumnSpecsOperator(GoogleCloudBaseOperator):
     """
     Lists column specs in a table.
 
@@ -640,7 +662,7 @@ class AutoMLTablesListColumnSpecsOperator(BaseOperator):
         return result
 
 
-class AutoMLTablesUpdateDatasetOperator(BaseOperator):
+class AutoMLTablesUpdateDatasetOperator(GoogleCloudBaseOperator):
     """
     Updates a dataset.
 
@@ -727,7 +749,7 @@ class AutoMLTablesUpdateDatasetOperator(BaseOperator):
         return Dataset.to_dict(result)
 
 
-class AutoMLGetModelOperator(BaseOperator):
+class AutoMLGetModelOperator(GoogleCloudBaseOperator):
     """
     Get Google Cloud AutoML model.
 
@@ -814,7 +836,7 @@ class AutoMLGetModelOperator(BaseOperator):
         return model
 
 
-class AutoMLDeleteModelOperator(BaseOperator):
+class AutoMLDeleteModelOperator(GoogleCloudBaseOperator):
     """
     Delete Google Cloud AutoML model.
 
@@ -887,13 +909,15 @@ class AutoMLDeleteModelOperator(BaseOperator):
             timeout=self.timeout,
             metadata=self.metadata,
         )
-        operation.result()
+        hook.wait_for_operation(timeout=self.timeout, operation=operation)
+        self.log.info("Deletion is completed")
 
 
-class AutoMLDeployModelOperator(BaseOperator):
+class AutoMLDeployModelOperator(GoogleCloudBaseOperator):
     """
-    Deploys a model. If a model is already deployed, deploying it with the same parameters
-    has no effect. Deploying with different parameters (as e.g. changing node_number) will
+    Deploys a model; if a model is already deployed, deploying it with the same parameters has no effect.
+
+    Deploying with different parameters (as e.g. changing node_number) will
     reset the deployment state without pausing the model_id's availability.
 
     Only applicable for Text Classification, Image Object Detection and Tables; all other
@@ -976,11 +1000,11 @@ class AutoMLDeployModelOperator(BaseOperator):
             timeout=self.timeout,
             metadata=self.metadata,
         )
-        operation.result()
-        self.log.info("Model deployed.")
+        hook.wait_for_operation(timeout=self.timeout, operation=operation)
+        self.log.info("Model was deployed successfully.")
 
 
-class AutoMLTablesListTableSpecsOperator(BaseOperator):
+class AutoMLTablesListTableSpecsOperator(GoogleCloudBaseOperator):
     """
     Lists table specs in a dataset.
 
@@ -1080,7 +1104,7 @@ class AutoMLTablesListTableSpecsOperator(BaseOperator):
         return result
 
 
-class AutoMLListDatasetOperator(BaseOperator):
+class AutoMLListDatasetOperator(GoogleCloudBaseOperator):
     """
     Lists AutoML Datasets in project.
 
@@ -1162,7 +1186,7 @@ class AutoMLListDatasetOperator(BaseOperator):
         return result
 
 
-class AutoMLDeleteDatasetOperator(BaseOperator):
+class AutoMLDeleteDatasetOperator(GoogleCloudBaseOperator):
     """
     Deletes a dataset and all of its contents.
 

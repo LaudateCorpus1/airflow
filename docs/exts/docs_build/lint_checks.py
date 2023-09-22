@@ -17,10 +17,10 @@
 from __future__ import annotations
 
 import ast
+import itertools
 import os
 import re
 from glob import glob
-from itertools import chain
 from typing import Iterable
 
 from docs.exts.docs_build.docs_builder import ALL_PROVIDER_YAMLS
@@ -87,7 +87,7 @@ def check_guide_links_in_operator_descriptions() -> list[DocBuildError]:
             operator_names=find_existing_guide_operator_names(
                 f"{DOCS_DIR}/apache-airflow/howto/operator/**/*.rst"
             ),
-            python_module_paths=chain(
+            python_module_paths=itertools.chain(
                 glob(f"{ROOT_PACKAGE_DIR}/operators/*.py"),
                 glob(f"{ROOT_PACKAGE_DIR}/sensors/*.py"),
             ),
@@ -101,7 +101,7 @@ def check_guide_links_in_operator_descriptions() -> list[DocBuildError]:
         }
 
         # Extract all potential python modules that can contain operators
-        python_module_paths = chain(
+        python_module_paths = itertools.chain(
             glob(f"{provider['package-dir']}/**/operators/*.py", recursive=True),
             glob(f"{provider['package-dir']}/**/sensors/*.py", recursive=True),
             glob(f"{provider['package-dir']}/**/transfers/*.py", recursive=True),
@@ -270,38 +270,6 @@ def find_example_dags(provider_dir):
     yield from glob(f"{ROOT_PROJECT_DIR}/tests/system/{system_tests_dir}/*/", recursive=True)
 
 
-def check_example_dags_in_provider_tocs() -> list[DocBuildError]:
-    """Checks that each documentation for provider packages has a link to example DAGs in the TOC."""
-    build_errors = []
-
-    for provider in ALL_PROVIDER_YAMLS:
-        example_dags_dirs = list(find_example_dags(provider["package-dir"]))
-        if not example_dags_dirs:
-            continue
-        doc_file_path = f"{DOCS_DIR}/{provider['package-name']}/index.rst"
-
-        if len(example_dags_dirs) == 1:
-            package_rel_path = os.path.relpath(example_dags_dirs[0], start=ROOT_PROJECT_DIR)
-            expected_text = f"Example DAGs <https://github.com/apache/airflow/tree/.*/{package_rel_path}>"
-            suggested_text = f"Example DAGs <https://github.com/apache/airflow/tree/main/{package_rel_path}>"
-        else:
-            expected_text = "Example DAGs <example-dags>"
-            suggested_text = "Example DAGs <example-dags>"
-
-        build_error = assert_file_contains(
-            file_path=doc_file_path,
-            pattern=expected_text,
-            message=(
-                f"A link to the example DAGs in table of contents is missing. Can you please add it?\n\n"
-                f"   {suggested_text}"
-            ),
-        )
-        if build_error:
-            build_errors.append(build_error)
-
-    return build_errors
-
-
 def check_pypi_repository_in_provider_tocs() -> list[DocBuildError]:
     """Checks that each documentation for provider packages has a link to PyPI files in the TOC."""
     build_errors = []
@@ -330,5 +298,4 @@ def run_all_check(disable_provider_checks: bool = False) -> list[DocBuildError]:
     general_errors.extend(check_exampleinclude_for_example_dags())
     if not disable_provider_checks:
         general_errors.extend(check_pypi_repository_in_provider_tocs())
-        general_errors.extend(check_example_dags_in_provider_tocs())
     return general_errors

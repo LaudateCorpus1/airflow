@@ -17,29 +17,39 @@
 # under the License.
 """This module contains a Google Cloud Vertex AI hook.
 
-.. spelling::
+.. spelling:word-list::
 
     aiplatform
     camelCase
 """
 from __future__ import annotations
 
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from google.api_core.client_options import ClientOptions
 from google.api_core.gapic_v1.method import DEFAULT, _MethodDefault
-from google.api_core.operation import Operation
-from google.api_core.retry import Retry
 from google.cloud.aiplatform_v1 import ModelServiceClient
-from google.cloud.aiplatform_v1.services.model_service.pagers import ListModelsPager
-from google.cloud.aiplatform_v1.types import Model, model_service
 
-from airflow import AirflowException
+from airflow.exceptions import AirflowException
 from airflow.providers.google.common.hooks.base_google import GoogleBaseHook
+
+if TYPE_CHECKING:
+    from google.api_core.operation import Operation
+    from google.api_core.retry import Retry
+    from google.cloud.aiplatform_v1.services.model_service.pagers import ListModelsPager
+    from google.cloud.aiplatform_v1.types import Model, model_service
 
 
 class ModelServiceHook(GoogleBaseHook):
     """Hook for Google Cloud Vertex AI Endpoint Service APIs."""
+
+    def __init__(self, **kwargs):
+        if kwargs.get("delegate_to") is not None:
+            raise RuntimeError(
+                "The `delegate_to` parameter has been deprecated before and finally removed in this version"
+                " of Google Provider. You MUST convert it to `impersonate_chain`"
+            )
+        super().__init__(**kwargs)
 
     def get_model_service_client(self, region: str | None = None) -> ModelServiceClient:
         """Returns ModelServiceClient."""

@@ -22,12 +22,14 @@ import click
 
 from airflow_breeze.branch_defaults import DEFAULT_AIRFLOW_CONSTRAINTS_BRANCH
 from airflow_breeze.global_constants import (
+    ALL_HISTORICAL_PYTHON_VERSIONS,
     ALLOWED_BACKENDS,
     ALLOWED_BUILD_CACHE,
+    ALLOWED_BUILD_PROGRESS,
+    ALLOWED_CELERY_BROKERS,
     ALLOWED_CONSTRAINTS_MODES_CI,
     ALLOWED_CONSTRAINTS_MODES_PROD,
     ALLOWED_INSTALLATION_PACKAGE_FORMATS,
-    ALLOWED_INTEGRATIONS,
     ALLOWED_MOUNT_OPTIONS,
     ALLOWED_MSSQL_VERSIONS,
     ALLOWED_MYSQL_VERSIONS,
@@ -37,7 +39,11 @@ from airflow_breeze.global_constants import (
     ALLOWED_PYTHON_MAJOR_MINOR_VERSIONS,
     ALLOWED_USE_AIRFLOW_VERSIONS,
     APACHE_AIRFLOW_GITHUB_REPOSITORY,
+    AUTOCOMPLETE_INTEGRATIONS,
+    DEFAULT_CELERY_BROKER,
     SINGLE_PLATFORMS,
+    START_AIRFLOW_ALLOWED_EXECUTORS,
+    START_AIRFLOW_DEFAULT_ALLOWED_EXECUTORS,
     get_available_documentation_packages,
 )
 from airflow_breeze.utils.custom_param_types import (
@@ -46,6 +52,7 @@ from airflow_breeze.utils.custom_param_types import (
     CacheableChoice,
     CacheableDefault,
     DryRunOption,
+    MySQLBackendVersionType,
     UseAirflowVersionType,
     VerboseOption,
 )
@@ -131,7 +138,7 @@ option_backend = click.option(
 option_integration = click.option(
     "--integration",
     help="Integration(s) to enable when running (can be more than one).",
-    type=BetterChoice(ALLOWED_INTEGRATIONS),
+    type=BetterChoice(AUTOCOMPLETE_INTEGRATIONS),
     multiple=True,
 )
 option_postgres_version = click.option(
@@ -146,7 +153,7 @@ option_mysql_version = click.option(
     "-M",
     "--mysql-version",
     help="Version of MySQL used.",
-    type=CacheableChoice(ALLOWED_MYSQL_VERSIONS),
+    type=MySQLBackendVersionType(ALLOWED_MYSQL_VERSIONS),
     default=CacheableDefault(ALLOWED_MYSQL_VERSIONS[0]),
     show_default=True,
 )
@@ -213,11 +220,6 @@ option_github_token = click.option(
     help="The token used to authenticate to GitHub.",
     envvar="GITHUB_TOKEN",
 )
-option_github_username = click.option(
-    "--github-username",
-    help="The user name used to authenticate to GitHub.",
-    envvar="GITHUB_USERNAME",
-)
 option_image_tag_for_pulling = click.option(
     "-t",
     "--image-tag",
@@ -227,7 +229,6 @@ option_image_tag_for_pulling = click.option(
     envvar="IMAGE_TAG",
 )
 option_image_tag_for_building = click.option(
-    "-t",
     "--image-tag",
     help="Tag the image after building it.",
     show_default=True,
@@ -235,7 +236,6 @@ option_image_tag_for_building = click.option(
     envvar="IMAGE_TAG",
 )
 option_image_tag_for_running = click.option(
-    "-t",
     "--image-tag",
     help="Tag of the image which is used to run the image (implies --mount-sources=skip).",
     show_default=True,
@@ -350,12 +350,6 @@ option_push = click.option(
     is_flag=True,
     envvar="PUSH",
 )
-option_empty_image = click.option(
-    "--empty-image",
-    help="Prepare empty image tagged with the same name as the Airflow image.",
-    is_flag=True,
-    envvar="EMPTY_IMAGE",
-)
 option_wait_for_image = click.option(
     "--wait-for-image",
     help="Wait until image is available.",
@@ -432,7 +426,7 @@ option_python_versions = click.option(
 )
 option_run_in_parallel = click.option(
     "--run-in-parallel",
-    help="Run the operation in parallel on all or selected subset of Python versions.",
+    help="Run the operation in parallel on all or selected subset of parameters.",
     is_flag=True,
     envvar="RUN_IN_PARALLEL",
 )
@@ -450,23 +444,22 @@ argument_packages = click.argument(
     required=False,
     type=BetterChoice(get_available_documentation_packages(short_version=True)),
 )
-option_timezone = click.option(
-    "--timezone",
-    default="UTC",
-    type=str,
-    help="Timezone to use during the check.",
+argument_packages_plus_all_providers = click.argument(
+    "packages_plus_all_providers",
+    nargs=-1,
+    required=False,
+    type=BetterChoice(["all-providers"] + get_available_documentation_packages(short_version=True)),
 )
-option_updated_on_or_after = click.option(
-    "--updated-on-or-after",
-    type=str,
-    help="Date when the release was updated after.",
+
+argument_packages_plus_all_providers_for_shorthand = click.argument(
+    "packages_plus_all_providers",
+    nargs=-1,
+    required=False,
+    type=BetterChoice(
+        ["all-providers"] + get_available_documentation_packages(short_version=True) + ["providers-index"]
+    ),
 )
-option_max_age = click.option(
-    "--max-age",
-    type=int,
-    default=3,
-    help="Max age of the last release (used if no updated-on-or-after if specified).",
-)
+
 option_airflow_constraints_reference = click.option(
     "--airflow-constraints-reference",
     help="Constraint reference to use. Useful with --use-airflow-version parameter to specify "
@@ -474,13 +467,26 @@ option_airflow_constraints_reference = click.option(
     default=DEFAULT_AIRFLOW_CONSTRAINTS_BRANCH,
     envvar="AIRFLOW_CONSTRAINTS_REFERENCE",
 )
+option_airflow_constraints_location = click.option(
+    "--airflow-constraints-location",
+    type=str,
+    default="",
+    help="If specified, it is used instead of calculating reference to the constraint file. "
+    "It could be full remote URL to the location file, or local file placed in `docker-context-files` "
+    "(in this case it has to start with /opt/airflow/docker-context-files).",
+)
 option_airflow_constraints_reference_build = click.option(
     "--airflow-constraints-reference",
     default=DEFAULT_AIRFLOW_CONSTRAINTS_BRANCH,
     help="Constraint reference to use when building the image.",
     envvar="AIRFLOW_CONSTRAINTS_REFERENCE",
 )
-
+option_airflow_constraints_mode_update = click.option(
+    "--airflow-constraints-mode",
+    type=BetterChoice(ALLOWED_CONSTRAINTS_MODES_CI),
+    required=False,
+    help="Limit constraint update to only selected constraint mode - if selected.",
+)
 option_airflow_constraints_mode_ci = click.option(
     "--airflow-constraints-mode",
     type=BetterChoice(ALLOWED_CONSTRAINTS_MODES_CI),
@@ -511,7 +517,16 @@ option_builder = click.option(
     "--builder",
     help="Buildx builder used to perform `docker buildx build` commands.",
     envvar="BUILDER",
-    default="default",
+    show_default=True,
+    default="autodetect",
+)
+option_build_progress = click.option(
+    "--build-progress",
+    help="Build progress.",
+    type=BetterChoice(ALLOWED_BUILD_PROGRESS),
+    envvar="BUILD_PROGRESS",
+    show_default=True,
+    default=ALLOWED_BUILD_PROGRESS[0],
 )
 option_include_success_outputs = click.option(
     "--include-success-outputs",
@@ -543,4 +558,80 @@ option_debug_resources = click.option(
     is_flag=True,
     help="Whether to show resource information while running in parallel.",
     envvar="DEBUG_RESOURCES",
+)
+option_executor = click.option(
+    "--executor",
+    type=click.Choice(START_AIRFLOW_ALLOWED_EXECUTORS, case_sensitive=False),
+    help="Specify the executor to use with airflow.",
+    default=START_AIRFLOW_DEFAULT_ALLOWED_EXECUTORS,
+    show_default=True,
+)
+option_celery_broker = click.option(
+    "--celery-broker",
+    type=click.Choice(ALLOWED_CELERY_BROKERS, case_sensitive=False),
+    help="Specify the celery message broker",
+    default=DEFAULT_CELERY_BROKER,
+    show_default=True,
+)
+option_celery_flower = click.option("--celery-flower", help="Start celery flower", is_flag=True)
+option_install_selected_providers = click.option(
+    "--install-selected-providers",
+    help="Comma-separated list of providers selected to be installed (implies --use-packages-from-dist).",
+    envvar="INSTALL_SELECTED_PROVIDERS",
+    default="",
+)
+option_skip_constraints = click.option(
+    "--skip-constraints",
+    is_flag=True,
+    help="Do not use constraints when installing providers.",
+    envvar="SKIP_CONSTRAINTS",
+)
+option_historical_python_version = click.option(
+    "--python",
+    type=BetterChoice(ALL_HISTORICAL_PYTHON_VERSIONS),
+    required=False,
+    envvar="PYTHON_VERSION",
+    help="Python version to update sbom from. (defaults to all historical python versions)",
+)
+option_commit_sha = click.option(
+    "--commit-sha",
+    default=None,
+    show_default=True,
+    envvar="COMMIT_SHA",
+    help="Commit SHA that is used to build the images.",
+)
+option_build_timeout_minutes = click.option(
+    "--build-timeout-minutes",
+    required=False,
+    type=int,
+    envvar="BUILD_TIMEOUT_MINUTES",
+    help="Optional timeout for the build in minutes. Useful to detect `pip` backtracking problems.",
+)
+option_eager_upgrade_additional_requirements = click.option(
+    "--eager-upgrade-additional-requirements",
+    required=False,
+    type=str,
+    envvar="EAGER_UPGRADE_ADDITIONAL_REQUIREMENTS",
+    help="Optional additional requirements to upgrade eagerly to avoid backtracking "
+    "(see `breeze ci find-backtracking-candidates`).",
+)
+option_airflow_site_directory = click.option(
+    "-a",
+    "--airflow-site-directory",
+    envvar="AIRFLOW_SITE_DIRECTORY",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, resolve_path=True),
+    help="Local directory path of cloned airflow-site repo.",
+    required=True,
+)
+option_upgrade_boto = click.option(
+    "--upgrade-boto",
+    help="Remove aiobotocore and upgrade botocore and boto to the latest version.",
+    is_flag=True,
+    envvar="UPGRADE_BOTO",
+)
+option_downgrade_sqlalchemy = click.option(
+    "--downgrade-sqlalchemy",
+    help="Downgrade SQLAlchemy to minimum supported version.",
+    is_flag=True,
+    envvar="DOWNGRADE_SQLALCHEMY",
 )

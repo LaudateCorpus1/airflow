@@ -17,40 +17,42 @@
 """This module contains Google DataFusion operators."""
 from __future__ import annotations
 
-import warnings
 from time import sleep
 from typing import TYPE_CHECKING, Any, Sequence
 
 from google.api_core.retry import exponential_sleep_generator
 from googleapiclient.errors import HttpError
 
-from airflow import AirflowException
-from airflow.models import BaseOperator
+from airflow.configuration import conf
+from airflow.exceptions import AirflowException
 from airflow.providers.google.cloud.hooks.datafusion import SUCCESS_STATES, DataFusionHook, PipelineStates
 from airflow.providers.google.cloud.links.datafusion import (
     DataFusionInstanceLink,
     DataFusionPipelineLink,
     DataFusionPipelinesLink,
 )
+from airflow.providers.google.cloud.operators.cloud_base import GoogleCloudBaseOperator
 from airflow.providers.google.cloud.triggers.datafusion import DataFusionStartPipelineTrigger
+from airflow.providers.google.cloud.utils.datafusion import DataFusionPipelineType
 
 if TYPE_CHECKING:
     from airflow.utils.context import Context
 
 
 class DataFusionPipelineLinkHelper:
-    """Helper class for Pipeline links"""
+    """Helper class for Pipeline links."""
 
     @staticmethod
     def get_project_id(instance):
         instance = instance["name"]
-        project_id = [x for x in instance.split("/") if x.startswith("airflow")][0]
+        project_id = next(x for x in instance.split("/") if x.startswith("airflow"))
         return project_id
 
 
-class CloudDataFusionRestartInstanceOperator(BaseOperator):
+class CloudDataFusionRestartInstanceOperator(GoogleCloudBaseOperator):
     """
     Restart a single Data Fusion instance.
+
     At the end of an operation instance is fully restarted.
 
     .. seealso::
@@ -62,9 +64,6 @@ class CloudDataFusionRestartInstanceOperator(BaseOperator):
     :param project_id: The ID of the Google Cloud project that the instance belongs to.
     :param api_version: The version of the api that will be requested for example 'v3'.
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -89,7 +88,6 @@ class CloudDataFusionRestartInstanceOperator(BaseOperator):
         project_id: str | None = None,
         api_version: str = "v1beta1",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -99,17 +97,11 @@ class CloudDataFusionRestartInstanceOperator(BaseOperator):
         self.project_id = project_id
         self.api_version = api_version
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
 
     def execute(self, context: Context) -> None:
         hook = DataFusionHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             api_version=self.api_version,
             impersonation_chain=self.impersonation_chain,
         )
@@ -132,7 +124,7 @@ class CloudDataFusionRestartInstanceOperator(BaseOperator):
         )
 
 
-class CloudDataFusionDeleteInstanceOperator(BaseOperator):
+class CloudDataFusionDeleteInstanceOperator(GoogleCloudBaseOperator):
     """
     Deletes a single Date Fusion instance.
 
@@ -145,9 +137,6 @@ class CloudDataFusionDeleteInstanceOperator(BaseOperator):
     :param project_id: The ID of the Google Cloud project that the instance belongs to.
     :param api_version: The version of the api that will be requested for example 'v3'.
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -171,7 +160,6 @@ class CloudDataFusionDeleteInstanceOperator(BaseOperator):
         project_id: str | None = None,
         api_version: str = "v1beta1",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -181,17 +169,11 @@ class CloudDataFusionDeleteInstanceOperator(BaseOperator):
         self.project_id = project_id
         self.api_version = api_version
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
 
     def execute(self, context: Context) -> None:
         hook = DataFusionHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             api_version=self.api_version,
             impersonation_chain=self.impersonation_chain,
         )
@@ -205,7 +187,7 @@ class CloudDataFusionDeleteInstanceOperator(BaseOperator):
         self.log.info("Instance %s deleted successfully", self.instance_name)
 
 
-class CloudDataFusionCreateInstanceOperator(BaseOperator):
+class CloudDataFusionCreateInstanceOperator(GoogleCloudBaseOperator):
     """
     Creates a new Data Fusion instance in the specified project and location.
 
@@ -220,9 +202,6 @@ class CloudDataFusionCreateInstanceOperator(BaseOperator):
     :param project_id: The ID of the Google Cloud project that the instance belongs to.
     :param api_version: The version of the api that will be requested for example 'v3'.
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -249,7 +228,6 @@ class CloudDataFusionCreateInstanceOperator(BaseOperator):
         project_id: str | None = None,
         api_version: str = "v1beta1",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -260,17 +238,11 @@ class CloudDataFusionCreateInstanceOperator(BaseOperator):
         self.project_id = project_id
         self.api_version = api_version
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
 
     def execute(self, context: Context) -> dict:
         hook = DataFusionHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             api_version=self.api_version,
             impersonation_chain=self.impersonation_chain,
         )
@@ -311,7 +283,7 @@ class CloudDataFusionCreateInstanceOperator(BaseOperator):
         return instance
 
 
-class CloudDataFusionUpdateInstanceOperator(BaseOperator):
+class CloudDataFusionUpdateInstanceOperator(GoogleCloudBaseOperator):
     """
     Updates a single Data Fusion instance.
 
@@ -332,9 +304,6 @@ class CloudDataFusionUpdateInstanceOperator(BaseOperator):
     :param project_id: The ID of the Google Cloud project that the instance belongs to.
     :param api_version: The version of the api that will be requested for example 'v3'.
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -362,7 +331,6 @@ class CloudDataFusionUpdateInstanceOperator(BaseOperator):
         project_id: str | None = None,
         api_version: str = "v1beta1",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -374,17 +342,11 @@ class CloudDataFusionUpdateInstanceOperator(BaseOperator):
         self.project_id = project_id
         self.api_version = api_version
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
 
     def execute(self, context: Context) -> None:
         hook = DataFusionHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             api_version=self.api_version,
             impersonation_chain=self.impersonation_chain,
         )
@@ -409,7 +371,7 @@ class CloudDataFusionUpdateInstanceOperator(BaseOperator):
         )
 
 
-class CloudDataFusionGetInstanceOperator(BaseOperator):
+class CloudDataFusionGetInstanceOperator(GoogleCloudBaseOperator):
     """
     Gets details of a single Data Fusion instance.
 
@@ -422,9 +384,6 @@ class CloudDataFusionGetInstanceOperator(BaseOperator):
     :param project_id: The ID of the Google Cloud project that the instance belongs to.
     :param api_version: The version of the api that will be requested for example 'v3'.
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -449,7 +408,6 @@ class CloudDataFusionGetInstanceOperator(BaseOperator):
         project_id: str | None = None,
         api_version: str = "v1beta1",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -459,17 +417,11 @@ class CloudDataFusionGetInstanceOperator(BaseOperator):
         self.project_id = project_id
         self.api_version = api_version
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
 
     def execute(self, context: Context) -> dict:
         hook = DataFusionHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             api_version=self.api_version,
             impersonation_chain=self.impersonation_chain,
         )
@@ -491,7 +443,7 @@ class CloudDataFusionGetInstanceOperator(BaseOperator):
         return instance
 
 
-class CloudDataFusionCreatePipelineOperator(BaseOperator):
+class CloudDataFusionCreatePipelineOperator(GoogleCloudBaseOperator):
     """
     Creates a Cloud Data Fusion pipeline.
 
@@ -509,9 +461,6 @@ class CloudDataFusionCreatePipelineOperator(BaseOperator):
         can create a namespace.
     :param api_version: The version of the api that will be requested for example 'v3'.
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -541,7 +490,6 @@ class CloudDataFusionCreatePipelineOperator(BaseOperator):
         project_id: str | None = None,
         api_version: str = "v1beta1",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -554,17 +502,11 @@ class CloudDataFusionCreatePipelineOperator(BaseOperator):
         self.project_id = project_id
         self.api_version = api_version
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
 
     def execute(self, context: Context) -> None:
         hook = DataFusionHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             api_version=self.api_version,
             impersonation_chain=self.impersonation_chain,
         )
@@ -590,7 +532,7 @@ class CloudDataFusionCreatePipelineOperator(BaseOperator):
         self.log.info("Pipeline %s created", self.pipeline_name)
 
 
-class CloudDataFusionDeletePipelineOperator(BaseOperator):
+class CloudDataFusionDeletePipelineOperator(GoogleCloudBaseOperator):
     """
     Deletes a Cloud Data Fusion pipeline.
 
@@ -607,9 +549,6 @@ class CloudDataFusionDeletePipelineOperator(BaseOperator):
         can create a namespace.
     :param api_version: The version of the api that will be requested for example 'v3'.
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -638,7 +577,6 @@ class CloudDataFusionDeletePipelineOperator(BaseOperator):
         project_id: str | None = None,
         api_version: str = "v1beta1",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -651,17 +589,11 @@ class CloudDataFusionDeletePipelineOperator(BaseOperator):
         self.project_id = project_id
         self.api_version = api_version
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
 
     def execute(self, context: Context) -> None:
         hook = DataFusionHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             api_version=self.api_version,
             impersonation_chain=self.impersonation_chain,
         )
@@ -681,7 +613,7 @@ class CloudDataFusionDeletePipelineOperator(BaseOperator):
         self.log.info("Pipeline deleted")
 
 
-class CloudDataFusionListPipelinesOperator(BaseOperator):
+class CloudDataFusionListPipelinesOperator(GoogleCloudBaseOperator):
     """
     Lists Cloud Data Fusion pipelines.
 
@@ -699,9 +631,6 @@ class CloudDataFusionListPipelinesOperator(BaseOperator):
         can create a namespace.
     :param api_version: The version of the api that will be requested for example 'v3'.
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -731,7 +660,6 @@ class CloudDataFusionListPipelinesOperator(BaseOperator):
         project_id: str | None = None,
         api_version: str = "v1beta1",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -744,17 +672,11 @@ class CloudDataFusionListPipelinesOperator(BaseOperator):
         self.project_id = project_id
         self.api_version = api_version
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
 
     def execute(self, context: Context) -> dict:
         hook = DataFusionHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             api_version=self.api_version,
             impersonation_chain=self.impersonation_chain,
         )
@@ -778,7 +700,7 @@ class CloudDataFusionListPipelinesOperator(BaseOperator):
         return pipelines
 
 
-class CloudDataFusionStartPipelineOperator(BaseOperator):
+class CloudDataFusionStartPipelineOperator(GoogleCloudBaseOperator):
     """
     Starts a Cloud Data Fusion pipeline. Works for both batch and stream pipelines.
 
@@ -787,6 +709,7 @@ class CloudDataFusionStartPipelineOperator(BaseOperator):
         :ref:`howto/operator:CloudDataFusionStartPipelineOperator`
 
     :param pipeline_name: Your pipeline name.
+    :param pipeline_type: Optional pipeline type (BATCH by default).
     :param instance_name: The name of the instance.
     :param success_states: If provided the operator will wait for pipeline to be in one of
         the provided states.
@@ -799,9 +722,6 @@ class CloudDataFusionStartPipelineOperator(BaseOperator):
         can create a namespace.
     :param api_version: The version of the api that will be requested for example 'v3'.
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -834,6 +754,7 @@ class CloudDataFusionStartPipelineOperator(BaseOperator):
         pipeline_name: str,
         instance_name: str,
         location: str,
+        pipeline_type: DataFusionPipelineType = DataFusionPipelineType.BATCH,
         runtime_args: dict[str, Any] | None = None,
         success_states: list[str] | None = None,
         namespace: str = "default",
@@ -841,15 +762,15 @@ class CloudDataFusionStartPipelineOperator(BaseOperator):
         project_id: str | None = None,
         api_version: str = "v1beta1",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         asynchronous=False,
-        deferrable=False,
+        deferrable: bool = conf.getboolean("operators", "default_deferrable", fallback=False),
         poll_interval=3.0,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.pipeline_name = pipeline_name
+        self.pipeline_type = pipeline_type
         self.runtime_args = runtime_args
         self.namespace = namespace
         self.instance_name = instance_name
@@ -857,11 +778,6 @@ class CloudDataFusionStartPipelineOperator(BaseOperator):
         self.project_id = project_id
         self.api_version = api_version
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
         self.asynchronous = asynchronous
         self.pipeline_timeout = pipeline_timeout
@@ -871,12 +787,11 @@ class CloudDataFusionStartPipelineOperator(BaseOperator):
         if success_states:
             self.success_states = success_states
         else:
-            self.success_states = SUCCESS_STATES + [PipelineStates.RUNNING]
+            self.success_states = [*SUCCESS_STATES, PipelineStates.RUNNING]
 
     def execute(self, context: Context) -> str:
         hook = DataFusionHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             api_version=self.api_version,
             impersonation_chain=self.impersonation_chain,
         )
@@ -889,6 +804,7 @@ class CloudDataFusionStartPipelineOperator(BaseOperator):
         api_url = instance["apiEndpoint"]
         pipeline_id = hook.start_pipeline(
             pipeline_name=self.pipeline_name,
+            pipeline_type=self.pipeline_type,
             instance_url=api_url,
             namespace=self.namespace,
             runtime_args=self.runtime_args,
@@ -913,11 +829,11 @@ class CloudDataFusionStartPipelineOperator(BaseOperator):
                     instance_url=api_url,
                     namespace=self.namespace,
                     pipeline_name=self.pipeline_name,
+                    pipeline_type=self.pipeline_type.value,
                     pipeline_id=pipeline_id,
                     poll_interval=self.poll_interval,
                     gcp_conn_id=self.gcp_conn_id,
                     impersonation_chain=self.impersonation_chain,
-                    delegate_to=self.delegate_to,
                 ),
                 method_name="execute_complete",
             )
@@ -929,6 +845,7 @@ class CloudDataFusionStartPipelineOperator(BaseOperator):
                     success_states=self.success_states,
                     pipeline_id=pipeline_id,
                     pipeline_name=self.pipeline_name,
+                    pipeline_type=self.pipeline_type,
                     namespace=self.namespace,
                     instance_url=api_url,
                     timeout=self.pipeline_timeout,
@@ -940,8 +857,8 @@ class CloudDataFusionStartPipelineOperator(BaseOperator):
     def execute_complete(self, context: Context, event: dict[str, Any]):
         """
         Callback for when the trigger fires - returns immediately.
-        Relies on trigger to throw an exception, otherwise it assumes execution was
-        successful.
+
+        Relies on trigger to throw an exception, otherwise it assumes execution was successful.
         """
         if event["status"] == "error":
             raise AirflowException(event["message"])
@@ -953,7 +870,7 @@ class CloudDataFusionStartPipelineOperator(BaseOperator):
         return event["pipeline_id"]
 
 
-class CloudDataFusionStopPipelineOperator(BaseOperator):
+class CloudDataFusionStopPipelineOperator(GoogleCloudBaseOperator):
     """
     Stops a Cloud Data Fusion pipeline. Works for both batch and stream pipelines.
 
@@ -969,9 +886,6 @@ class CloudDataFusionStopPipelineOperator(BaseOperator):
         can create a namespace.
     :param api_version: The version of the api that will be requested for example 'v3'.
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -999,7 +913,6 @@ class CloudDataFusionStopPipelineOperator(BaseOperator):
         project_id: str | None = None,
         api_version: str = "v1beta1",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
         **kwargs,
     ) -> None:
@@ -1011,17 +924,11 @@ class CloudDataFusionStopPipelineOperator(BaseOperator):
         self.project_id = project_id
         self.api_version = api_version
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.impersonation_chain = impersonation_chain
 
     def execute(self, context: Context) -> None:
         hook = DataFusionHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             api_version=self.api_version,
             impersonation_chain=self.impersonation_chain,
         )

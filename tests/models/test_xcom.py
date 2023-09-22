@@ -19,21 +19,26 @@ from __future__ import annotations
 import datetime
 import operator
 import os
+from typing import TYPE_CHECKING
 from unittest import mock
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy.orm import Session
 
 from airflow.configuration import conf
 from airflow.models.dagrun import DagRun, DagRunType
-from airflow.models.taskinstance import TaskInstance, TaskInstanceKey
-from airflow.models.xcom import XCOM_RETURN_KEY, BaseXCom, XCom, resolve_xcom_backend
+from airflow.models.taskinstance import TaskInstance
+from airflow.models.taskinstancekey import TaskInstanceKey
+from airflow.models.xcom import BaseXCom, XCom, resolve_xcom_backend
 from airflow.operators.empty import EmptyOperator
 from airflow.settings import json
 from airflow.utils import timezone
 from airflow.utils.session import create_session
+from airflow.utils.xcom import XCOM_RETURN_KEY
 from tests.test_utils.config import conf_vars
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 class CustomXCom(BaseXCom):

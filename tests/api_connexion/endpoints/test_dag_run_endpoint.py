@@ -31,7 +31,7 @@ from airflow.operators.empty import EmptyOperator
 from airflow.security import permissions
 from airflow.utils import timezone
 from airflow.utils.session import create_session, provide_session
-from airflow.utils.state import State
+from airflow.utils.state import DagRunState, State
 from airflow.utils.types import DagRunType
 from tests.test_utils.api_connexion_utils import assert_401, create_user, delete_roles, delete_user
 from tests.test_utils.config import conf_vars
@@ -50,6 +50,7 @@ def configured_app(minimal_app_for_api):
         permissions=[
             (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG),
             (permissions.ACTION_CAN_READ, permissions.RESOURCE_DATASET),
+            (permissions.ACTION_CAN_READ, permissions.RESOURCE_CLUSTER_ACTIVITY),
             (permissions.ACTION_CAN_EDIT, permissions.RESOURCE_DAG),
             (permissions.ACTION_CAN_CREATE, permissions.RESOURCE_DAG_RUN),
             (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG_RUN),
@@ -120,6 +121,7 @@ class TestDagRunEndpoint:
 
     def _create_dag(self, dag_id):
         dag_instance = DagModel(dag_id=dag_id)
+        dag_instance.is_active = True
         with create_session() as session:
             session.add(dag_instance)
         dag = DAG(dag_id=dag_id, schedule=None)
@@ -132,10 +134,10 @@ class TestDagRunEndpoint:
 
         for i in range(idx_start, idx_start + 2):
             if i == 1:
-                dags.append(DagModel(dag_id="TEST_DAG_ID"))
+                dags.append(DagModel(dag_id="TEST_DAG_ID", is_active=True))
             dagrun_model = DagRun(
                 dag_id="TEST_DAG_ID",
-                run_id="TEST_DAG_RUN_ID_" + str(i),
+                run_id=f"TEST_DAG_RUN_ID_{i}",
                 run_type=DagRunType.MANUAL,
                 execution_date=timezone.parse(self.default_time) + timedelta(days=i - 1),
                 start_date=timezone.parse(self.default_time),
@@ -146,11 +148,11 @@ class TestDagRunEndpoint:
 
         if extra_dag:
             for i in range(idx_start + 2, idx_start + 4):
-                dags.append(DagModel(dag_id="TEST_DAG_ID_" + str(i)))
+                dags.append(DagModel(dag_id=f"TEST_DAG_ID_{i}"))
                 dag_runs.append(
                     DagRun(
-                        dag_id="TEST_DAG_ID_" + str(i),
-                        run_id="TEST_DAG_RUN_ID_" + str(i),
+                        dag_id=f"TEST_DAG_ID_{i}",
+                        run_id=f"TEST_DAG_RUN_ID_{i}",
                         run_type=DagRunType.MANUAL,
                         execution_date=timezone.parse(self.default_time_2),
                         start_date=timezone.parse(self.default_time),
@@ -494,7 +496,7 @@ class TestGetDagRunsPagination(TestDagRunEndpoint):
         dag_runs = [
             DagRun(
                 dag_id="TEST_DAG_ID",
-                run_id="TEST_DAG_RUN_ID" + str(i),
+                run_id=f"TEST_DAG_RUN_ID{i}",
                 run_type=DagRunType.MANUAL,
                 execution_date=timezone.parse(self.default_time) + timedelta(minutes=i),
                 start_date=timezone.parse(self.default_time),
@@ -579,7 +581,7 @@ class TestGetDagRunsPaginationFilters(TestDagRunEndpoint):
         return [
             DagRun(
                 dag_id="TEST_DAG_ID",
-                run_id="TEST_START_EXEC_DAY_1" + str(i),
+                run_id=f"TEST_START_EXEC_DAY_1{i}",
                 run_type=DagRunType.MANUAL,
                 execution_date=timezone.parse(dates[i]),
                 start_date=timezone.parse(dates[i]),
@@ -870,7 +872,7 @@ class TestGetDagRunBatchPagination(TestDagRunEndpoint):
         dag_runs = [
             DagRun(
                 dag_id="TEST_DAG_ID",
-                run_id="TEST_DAG_RUN_ID" + str(i),
+                run_id=f"TEST_DAG_RUN_ID{i}",
                 state="running",
                 run_type=DagRunType.MANUAL,
                 execution_date=timezone.parse(self.default_time) + timedelta(minutes=i),
@@ -954,14 +956,14 @@ class TestGetDagRunBatchDateFilters(TestDagRunEndpoint):
         dag_runs = [
             DagRun(
                 dag_id="TEST_DAG_ID",
-                run_id="TEST_START_EXEC_DAY_1" + str(i),
+                run_id=f"TEST_START_EXEC_DAY_1{i}",
                 run_type=DagRunType.MANUAL,
-                execution_date=timezone.parse(dates[i]),
-                start_date=timezone.parse(dates[i]),
+                execution_date=timezone.parse(date),
+                start_date=timezone.parse(date),
                 external_trigger=True,
                 state="success",
             )
-            for i in range(len(dates))
+            for i, date in enumerate(dates)
         ]
         with create_session() as session:
             session.add_all(dag_runs)
@@ -1086,6 +1088,18 @@ class TestPostDagRun(TestDagRunEndpoint):
             "note": note,
         }
         _check_last_log(session, dag_id="TEST_DAG_ID", event="dag_run.create", execution_date=None)
+
+    def test_should_respond_404_if_a_dag_is_inactive(self, session):
+        dm = self._create_dag("TEST_INACTIVE_DAG_ID")
+        dm.is_active = False
+        session.add(dm)
+        session.flush()
+        response = self.client.post(
+            "api/v1/dags/TEST_INACTIVE_DAG_ID/dagRuns",
+            json={},
+            environ_overrides={"REMOTE_USER": "test"},
+        )
+        assert response.status_code == 404
 
     def test_should_respond_400_if_a_dag_has_import_errors(self, session):
         """Test that if a dagmodel has import errors, dags won't be triggered"""
@@ -1427,7 +1441,7 @@ class TestClearDagRun(TestDagRunEndpoint):
         with dag_maker(dag_id) as dag:
             task = EmptyOperator(task_id="task_id", dag=dag)
         self.app.dag_bag.bag_dag(dag, root_dag=dag)
-        dr = dag_maker.create_dagrun(run_id=dag_run_id)
+        dr = dag_maker.create_dagrun(run_id=dag_run_id, state=DagRunState.FAILED)
         ti = dr.get_task_instance(task_id="task_id")
         ti.task = task
         ti.state = State.SUCCESS

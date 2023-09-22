@@ -10,11 +10,12 @@
 .airflowignore
 .babelrc
 .coverage
-.coveragerc
 .codecov.yml
 .codespellignorelines
-.eslintrc
 .eslintignore
+.eslintrc
+.prettierignore
+.prettierrc
 .rat-excludes
 .stylelintignore
 .stylelintrc
@@ -36,7 +37,6 @@ metastore_db
 .*md5
 .*zip
 .*lock
-unittests.cfg
 logs
 .bash_aliases
 venv
@@ -100,7 +100,7 @@ input_notebook.ipynb
 tmp
 
 # Vendored-in code
-_vendor
+.*_vendor
 
 # generated doc-only-changes.txt
 .latest-doc-only-change.txt
@@ -132,3 +132,6 @@ chart/*.iml
 
 # Sha files
 .*sha256
+
+# DOAP file
+doap_airflow.rdf

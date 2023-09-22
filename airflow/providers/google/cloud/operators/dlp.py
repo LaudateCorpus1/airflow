@@ -15,35 +15,35 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""
-This module contains various Google Cloud DLP operators
-which allow you to perform basic operations using
-Cloud DLP.
-"""
+"""Various Google Cloud DLP operators which allow you to perform basic operations using Cloud DLP."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Sequence
 
 from google.api_core.exceptions import AlreadyExists, InvalidArgument, NotFound
 from google.api_core.gapic_v1.method import DEFAULT, _MethodDefault
-from google.api_core.retry import Retry
 from google.cloud.dlp_v2.types import (
     ByteContentItem,
     ContentItem,
     DeidentifyConfig,
+    DeidentifyContentResponse,
     DeidentifyTemplate,
-    FieldMask,
+    DlpJob,
     InspectConfig,
+    InspectContentResponse,
     InspectJobConfig,
     InspectTemplate,
     JobTrigger,
+    ListInfoTypesResponse,
     RedactImageRequest,
+    RedactImageResponse,
+    ReidentifyContentResponse,
     RiskAnalysisJobConfig,
+    StoredInfoType,
     StoredInfoTypeConfig,
 )
-from google.protobuf.json_format import MessageToDict
 
-from airflow.models import BaseOperator
 from airflow.providers.google.cloud.hooks.dlp import CloudDLPHook
 from airflow.providers.google.cloud.links.data_loss_prevention import (
     CloudDLPDeidentifyTemplateDetailsLink,
@@ -58,12 +58,16 @@ from airflow.providers.google.cloud.links.data_loss_prevention import (
     CloudDLPJobTriggersListLink,
     CloudDLPPossibleInfoTypesListLink,
 )
+from airflow.providers.google.cloud.operators.cloud_base import GoogleCloudBaseOperator
 
 if TYPE_CHECKING:
+    from google.api_core.retry import Retry
+    from google.protobuf.field_mask_pb2 import FieldMask
+
     from airflow.utils.context import Context
 
 
-class CloudDLPCancelDLPJobOperator(BaseOperator):
+class CloudDLPCancelDLPJobOperator(GoogleCloudBaseOperator):
     """
     Starts asynchronous cancellation on a long-running DlpJob.
 
@@ -144,10 +148,9 @@ class CloudDLPCancelDLPJobOperator(BaseOperator):
             )
 
 
-class CloudDLPCreateDeidentifyTemplateOperator(BaseOperator):
+class CloudDLPCreateDeidentifyTemplateOperator(GoogleCloudBaseOperator):
     """
-    Creates a DeidentifyTemplate for re-using frequently used configuration for
-    de-identifying content, images, and storage.
+    Create a deidentify template to reuse frequently-used configurations for content, images, and storage.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -239,7 +242,7 @@ class CloudDLPCreateDeidentifyTemplateOperator(BaseOperator):
                 timeout=self.timeout,
                 metadata=self.metadata,
             )
-        result = MessageToDict(template)
+        result = DeidentifyTemplate.to_dict(template)
 
         project_id = self.project_id or hook.project_id
         template_id = self.template_id or result["name"].split("/")[-1] if result["name"] else None
@@ -254,7 +257,7 @@ class CloudDLPCreateDeidentifyTemplateOperator(BaseOperator):
         return result
 
 
-class CloudDLPCreateDLPJobOperator(BaseOperator):
+class CloudDLPCreateDLPJobOperator(GoogleCloudBaseOperator):
     """
     Creates a new job to inspect storage or calculate risk metrics.
 
@@ -352,7 +355,7 @@ class CloudDLPCreateDLPJobOperator(BaseOperator):
                 metadata=self.metadata,
             )
 
-        result = MessageToDict(job)
+        result = DlpJob.to_dict(job)
 
         project_id = self.project_id or hook.project_id
         if project_id:
@@ -366,10 +369,9 @@ class CloudDLPCreateDLPJobOperator(BaseOperator):
         return result
 
 
-class CloudDLPCreateInspectTemplateOperator(BaseOperator):
+class CloudDLPCreateInspectTemplateOperator(GoogleCloudBaseOperator):
     """
-    Creates an InspectTemplate for re-using frequently used configuration for
-    inspecting content, images, and storage.
+    Create an InspectTemplate to reuse frequently-used configurations for content, images, and storage.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -462,7 +464,7 @@ class CloudDLPCreateInspectTemplateOperator(BaseOperator):
                 metadata=self.metadata,
             )
 
-        result = MessageToDict(template)
+        result = InspectTemplate.to_dict(template)
 
         template_id = self.template_id or result["name"].split("/")[-1] if result["name"] else None
         project_id = self.project_id or hook.project_id
@@ -477,10 +479,9 @@ class CloudDLPCreateInspectTemplateOperator(BaseOperator):
         return result
 
 
-class CloudDLPCreateJobTriggerOperator(BaseOperator):
+class CloudDLPCreateJobTriggerOperator(GoogleCloudBaseOperator):
     """
-    Creates a job trigger to run DLP actions such as scanning storage for sensitive
-    information on a set schedule.
+    Create a job trigger to run DLP actions such as scanning storage for sensitive info on a set schedule.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -568,7 +569,7 @@ class CloudDLPCreateJobTriggerOperator(BaseOperator):
                 metadata=self.metadata,
             )
 
-        result = MessageToDict(trigger)
+        result = JobTrigger.to_dict(trigger)
 
         project_id = self.project_id or hook.project_id
         trigger_name = result["name"].split("/")[-1] if result["name"] else None
@@ -583,7 +584,7 @@ class CloudDLPCreateJobTriggerOperator(BaseOperator):
         return result
 
 
-class CloudDLPCreateStoredInfoTypeOperator(BaseOperator):
+class CloudDLPCreateStoredInfoTypeOperator(GoogleCloudBaseOperator):
     """
     Creates a pre-built stored infoType to be used for inspection.
 
@@ -680,7 +681,7 @@ class CloudDLPCreateStoredInfoTypeOperator(BaseOperator):
                 metadata=self.metadata,
             )
 
-        result = MessageToDict(info)
+        result = StoredInfoType.to_dict(info)
 
         project_id = self.project_id or hook.project_id
         stored_info_type_id = (
@@ -697,10 +698,9 @@ class CloudDLPCreateStoredInfoTypeOperator(BaseOperator):
         return result
 
 
-class CloudDLPDeidentifyContentOperator(BaseOperator):
+class CloudDLPDeidentifyContentOperator(GoogleCloudBaseOperator):
     """
-    De-identifies potentially sensitive info from a ContentItem. This method has limits
-    on input size and output size.
+    De-identifies potentially sensitive info from a content item; limits input size and output size.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -794,10 +794,10 @@ class CloudDLPDeidentifyContentOperator(BaseOperator):
             timeout=self.timeout,
             metadata=self.metadata,
         )
-        return MessageToDict(response)
+        return DeidentifyContentResponse.to_dict(response)
 
 
-class CloudDLPDeleteDeidentifyTemplateOperator(BaseOperator):
+class CloudDLPDeleteDeidentifyTemplateOperator(GoogleCloudBaseOperator):
     """
     Deletes a DeidentifyTemplate.
 
@@ -885,10 +885,12 @@ class CloudDLPDeleteDeidentifyTemplateOperator(BaseOperator):
             self.log.error("Template %s not found.", self.template_id)
 
 
-class CloudDLPDeleteDLPJobOperator(BaseOperator):
+class CloudDLPDeleteDLPJobOperator(GoogleCloudBaseOperator):
     """
-    Deletes a long-running DlpJob. This method indicates that the client is no longer
-    interested in the DlpJob result. The job will be cancelled if possible.
+    Deletes a long-running DlpJob.
+
+    This method indicates that the client is no longer interested
+    in the DlpJob result. The job will be cancelled if possible.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -970,7 +972,7 @@ class CloudDLPDeleteDLPJobOperator(BaseOperator):
             self.log.error("Job %s id not found.", self.dlp_job_id)
 
 
-class CloudDLPDeleteInspectTemplateOperator(BaseOperator):
+class CloudDLPDeleteInspectTemplateOperator(GoogleCloudBaseOperator):
     """
     Deletes an InspectTemplate.
 
@@ -1060,7 +1062,7 @@ class CloudDLPDeleteInspectTemplateOperator(BaseOperator):
             self.log.error("Template %s not found", self.template_id)
 
 
-class CloudDLPDeleteJobTriggerOperator(BaseOperator):
+class CloudDLPDeleteJobTriggerOperator(GoogleCloudBaseOperator):
     """
     Deletes a job trigger.
 
@@ -1144,7 +1146,7 @@ class CloudDLPDeleteJobTriggerOperator(BaseOperator):
             self.log.error("Trigger %s not found", self.job_trigger_id)
 
 
-class CloudDLPDeleteStoredInfoTypeOperator(BaseOperator):
+class CloudDLPDeleteStoredInfoTypeOperator(GoogleCloudBaseOperator):
     """
     Deletes a stored infoType.
 
@@ -1233,7 +1235,7 @@ class CloudDLPDeleteStoredInfoTypeOperator(BaseOperator):
             )
 
 
-class CloudDLPGetDeidentifyTemplateOperator(BaseOperator):
+class CloudDLPGetDeidentifyTemplateOperator(GoogleCloudBaseOperator):
     """
     Gets a DeidentifyTemplate.
 
@@ -1317,10 +1319,10 @@ class CloudDLPGetDeidentifyTemplateOperator(BaseOperator):
                 context=context, task_instance=self, project_id=project_id, template_name=self.template_id
             )
 
-        return MessageToDict(template)
+        return DeidentifyTemplate.to_dict(template)
 
 
-class CloudDLPGetDLPJobOperator(BaseOperator):
+class CloudDLPGetDLPJobOperator(GoogleCloudBaseOperator):
     """
     Gets the latest state of a long-running DlpJob.
 
@@ -1401,10 +1403,10 @@ class CloudDLPGetDLPJobOperator(BaseOperator):
                 job_name=self.dlp_job_id,
             )
 
-        return MessageToDict(job)
+        return DlpJob.to_dict(job)
 
 
-class CloudDLPGetInspectTemplateOperator(BaseOperator):
+class CloudDLPGetInspectTemplateOperator(GoogleCloudBaseOperator):
     """
     Gets an InspectTemplate.
 
@@ -1491,10 +1493,10 @@ class CloudDLPGetInspectTemplateOperator(BaseOperator):
                 template_name=self.template_id,
             )
 
-        return MessageToDict(template)
+        return InspectTemplate.to_dict(template)
 
 
-class CloudDLPGetDLPJobTriggerOperator(BaseOperator):
+class CloudDLPGetDLPJobTriggerOperator(GoogleCloudBaseOperator):
     """
     Gets a job trigger.
 
@@ -1575,10 +1577,10 @@ class CloudDLPGetDLPJobTriggerOperator(BaseOperator):
                 trigger_name=self.job_trigger_id,
             )
 
-        return MessageToDict(trigger)
+        return JobTrigger.to_dict(trigger)
 
 
-class CloudDLPGetStoredInfoTypeOperator(BaseOperator):
+class CloudDLPGetStoredInfoTypeOperator(GoogleCloudBaseOperator):
     """
     Gets a stored infoType.
 
@@ -1665,13 +1667,12 @@ class CloudDLPGetStoredInfoTypeOperator(BaseOperator):
                 info_type_name=self.stored_info_type_id,
             )
 
-        return MessageToDict(info)
+        return StoredInfoType.to_dict(info)
 
 
-class CloudDLPInspectContentOperator(BaseOperator):
+class CloudDLPInspectContentOperator(GoogleCloudBaseOperator):
     """
-    Finds potentially sensitive info in content. This method has limits on
-    input size, processing time, and output size.
+    Finds potentially sensitive info in content; limits input size, processing time, and output size.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -1751,10 +1752,10 @@ class CloudDLPInspectContentOperator(BaseOperator):
             timeout=self.timeout,
             metadata=self.metadata,
         )
-        return MessageToDict(response)
+        return InspectContentResponse.to_dict(response)
 
 
-class CloudDLPListDeidentifyTemplatesOperator(BaseOperator):
+class CloudDLPListDeidentifyTemplatesOperator(GoogleCloudBaseOperator):
     """
     Lists DeidentifyTemplates.
 
@@ -1836,7 +1837,6 @@ class CloudDLPListDeidentifyTemplatesOperator(BaseOperator):
             timeout=self.timeout,
             metadata=self.metadata,
         )
-        # the MessageToDict does not have the right type defined as possible to pass in constructor
 
         project_id = self.project_id or hook.project_id
         if project_id:
@@ -1846,10 +1846,10 @@ class CloudDLPListDeidentifyTemplatesOperator(BaseOperator):
                 project_id=project_id,
             )
 
-        return [MessageToDict(template) for template in templates]  # type: ignore[arg-type]
+        return [DeidentifyTemplate.to_dict(template) for template in templates]  # type: ignore[arg-type]
 
 
-class CloudDLPListDLPJobsOperator(BaseOperator):
+class CloudDLPListDLPJobsOperator(GoogleCloudBaseOperator):
     """
     Lists DlpJobs that match the specified filter in the request.
 
@@ -1942,11 +1942,11 @@ class CloudDLPListDLPJobsOperator(BaseOperator):
                 project_id=project_id,
             )
 
-        # the MessageToDict does not have the right type defined as possible to pass in constructor
-        return [MessageToDict(job) for job in jobs]  # type: ignore[arg-type]
+        # the DlpJob.to_dict does not have the right type defined as possible to pass in constructor
+        return [DlpJob.to_dict(job) for job in jobs]  # type: ignore[arg-type]
 
 
-class CloudDLPListInfoTypesOperator(BaseOperator):
+class CloudDLPListInfoTypesOperator(GoogleCloudBaseOperator):
     """
     Returns a list of the sensitive information types that the DLP API supports.
 
@@ -2027,10 +2027,10 @@ class CloudDLPListInfoTypesOperator(BaseOperator):
                 project_id=project_id,
             )
 
-        return MessageToDict(response)
+        return ListInfoTypesResponse.to_dict(response)
 
 
-class CloudDLPListInspectTemplatesOperator(BaseOperator):
+class CloudDLPListInspectTemplatesOperator(GoogleCloudBaseOperator):
     """
     Lists InspectTemplates.
 
@@ -2121,10 +2121,10 @@ class CloudDLPListInspectTemplatesOperator(BaseOperator):
                 project_id=project_id,
             )
 
-        return [MessageToDict(t) for t in templates]
+        return [InspectTemplate.to_dict(t) for t in templates]
 
 
-class CloudDLPListJobTriggersOperator(BaseOperator):
+class CloudDLPListJobTriggersOperator(GoogleCloudBaseOperator):
     """
     Lists job triggers.
 
@@ -2213,10 +2213,10 @@ class CloudDLPListJobTriggersOperator(BaseOperator):
                 project_id=project_id,
             )
 
-        return [MessageToDict(j) for j in jobs]
+        return [JobTrigger.to_dict(j) for j in jobs]
 
 
-class CloudDLPListStoredInfoTypesOperator(BaseOperator):
+class CloudDLPListStoredInfoTypesOperator(GoogleCloudBaseOperator):
     """
     Lists stored infoTypes.
 
@@ -2307,13 +2307,12 @@ class CloudDLPListStoredInfoTypesOperator(BaseOperator):
                 project_id=project_id,
             )
 
-        return [MessageToDict(i) for i in infos]
+        return [StoredInfoType.to_dict(i) for i in infos]
 
 
-class CloudDLPRedactImageOperator(BaseOperator):
+class CloudDLPRedactImageOperator(GoogleCloudBaseOperator):
     """
-    Redacts potentially sensitive info from an image. This method has limits on
-    input size, processing time, and output size.
+    Redacts potentially sensitive info from an image; limits input size, processing time, and output size.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -2399,10 +2398,10 @@ class CloudDLPRedactImageOperator(BaseOperator):
             timeout=self.timeout,
             metadata=self.metadata,
         )
-        return MessageToDict(response)
+        return RedactImageResponse.to_dict(response)
 
 
-class CloudDLPReidentifyContentOperator(BaseOperator):
+class CloudDLPReidentifyContentOperator(GoogleCloudBaseOperator):
     """
     Re-identifies content that has been de-identified.
 
@@ -2496,10 +2495,10 @@ class CloudDLPReidentifyContentOperator(BaseOperator):
             timeout=self.timeout,
             metadata=self.metadata,
         )
-        return MessageToDict(response)
+        return ReidentifyContentResponse.to_dict(response)
 
 
-class CloudDLPUpdateDeidentifyTemplateOperator(BaseOperator):
+class CloudDLPUpdateDeidentifyTemplateOperator(GoogleCloudBaseOperator):
     """
     Updates the DeidentifyTemplate.
 
@@ -2596,10 +2595,10 @@ class CloudDLPUpdateDeidentifyTemplateOperator(BaseOperator):
                 template_name=self.template_id,
             )
 
-        return MessageToDict(template)
+        return DeidentifyTemplate.to_dict(template)
 
 
-class CloudDLPUpdateInspectTemplateOperator(BaseOperator):
+class CloudDLPUpdateInspectTemplateOperator(GoogleCloudBaseOperator):
     """
     Updates the InspectTemplate.
 
@@ -2696,10 +2695,10 @@ class CloudDLPUpdateInspectTemplateOperator(BaseOperator):
                 template_name=self.template_id,
             )
 
-        return MessageToDict(template)
+        return InspectTemplate.to_dict(template)
 
 
-class CloudDLPUpdateJobTriggerOperator(BaseOperator):
+class CloudDLPUpdateJobTriggerOperator(GoogleCloudBaseOperator):
     """
     Updates a job trigger.
 
@@ -2746,7 +2745,7 @@ class CloudDLPUpdateJobTriggerOperator(BaseOperator):
         *,
         job_trigger_id,
         project_id: str | None = None,
-        job_trigger: JobTrigger | None = None,
+        job_trigger: dict | JobTrigger | None = None,
         update_mask: dict | FieldMask | None = None,
         retry: Retry | _MethodDefault = DEFAULT,
         timeout: float | None = None,
@@ -2790,10 +2789,10 @@ class CloudDLPUpdateJobTriggerOperator(BaseOperator):
                 trigger_name=self.job_trigger_id,
             )
 
-        return MessageToDict(trigger)
+        return JobTrigger.to_dict(trigger)
 
 
-class CloudDLPUpdateStoredInfoTypeOperator(BaseOperator):
+class CloudDLPUpdateStoredInfoTypeOperator(GoogleCloudBaseOperator):
     """
     Updates the stored infoType by creating a new version.
 
@@ -2891,4 +2890,4 @@ class CloudDLPUpdateStoredInfoTypeOperator(BaseOperator):
                 info_type_name=self.stored_info_type_id,
             )
 
-        return MessageToDict(info)
+        return StoredInfoType.to_dict(info)

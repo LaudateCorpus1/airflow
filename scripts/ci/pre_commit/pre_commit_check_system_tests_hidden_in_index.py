@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 
@@ -37,7 +38,7 @@ DOCS_ROOT = AIRFLOW_SOURCES_ROOT / "docs"
 PREFIX = "apache-airflow-providers-"
 
 
-errors = []
+errors: list[Any] = []
 
 
 def check_system_test_entry_hidden(provider_index: Path):
@@ -50,6 +51,7 @@ def check_system_test_entry_hidden(provider_index: Path):
     expected_text = f"""
 .. toctree::
     :hidden:
+    :maxdepth: 1
     :caption: System tests
 
     System Tests <_api/tests/system/providers/{provider_path}/index>
@@ -77,4 +79,4 @@ def check_system_test_entry_hidden(provider_index: Path):
 if __name__ == "__main__":
     for file in sys.argv[1:]:
         check_system_test_entry_hidden(Path(file))
-    sys.exit(0 if len(errors) == 0 else 1)
+    sys.exit(1 if errors else 0)

@@ -26,17 +26,19 @@ from google.api_core.retry import Retry, exponential_sleep_generator
 from google.cloud.metastore_v1 import MetadataExport, MetadataManagementActivity
 from google.cloud.metastore_v1.types import Backup, MetadataImport, Service
 from google.cloud.metastore_v1.types.metastore import DatabaseDumpSpec, Restore
-from google.protobuf.field_mask_pb2 import FieldMask
 from googleapiclient.errors import HttpError
 
-from airflow import AirflowException
+from airflow.exceptions import AirflowException
 from airflow.models import BaseOperator, BaseOperatorLink
 from airflow.models.xcom import XCom
 from airflow.providers.google.cloud.hooks.dataproc_metastore import DataprocMetastoreHook
+from airflow.providers.google.cloud.operators.cloud_base import GoogleCloudBaseOperator
 from airflow.providers.google.common.links.storage import StorageLink
 
 if TYPE_CHECKING:
-    from airflow.models.taskinstance import TaskInstanceKey
+    from google.protobuf.field_mask_pb2 import FieldMask
+
+    from airflow.models.taskinstancekey import TaskInstanceKey
     from airflow.utils.context import Context
 
 
@@ -50,7 +52,7 @@ METASTORE_SERVICE_LINK = METASTORE_BASE_LINK + "/config?project={project_id}"
 
 
 class DataprocMetastoreLink(BaseOperatorLink):
-    """Helper class for constructing Dataproc Metastore resource link"""
+    """Helper class for constructing Dataproc Metastore resource link."""
 
     name = "Dataproc Metastore"
     key = "conf"
@@ -98,7 +100,7 @@ class DataprocMetastoreLink(BaseOperatorLink):
 
 
 class DataprocMetastoreDetailedLink(BaseOperatorLink):
-    """Helper class for constructing Dataproc Metastore detailed resource link"""
+    """Helper class for constructing Dataproc Metastore detailed resource link."""
 
     name = "Dataproc Metastore resource"
     key = "config"
@@ -143,9 +145,8 @@ class DataprocMetastoreDetailedLink(BaseOperatorLink):
         )
 
 
-class DataprocMetastoreCreateBackupOperator(BaseOperator):
-    """
-    Creates a new backup in a given project and location.
+class DataprocMetastoreCreateBackupOperator(GoogleCloudBaseOperator):
+    """Create a new backup in a given project and location.
 
     :param project_id: Required. The ID of the Google Cloud project that the service belongs to.
     :param region: Required. The ID of the Google Cloud region that the service belongs to.
@@ -258,9 +259,8 @@ class DataprocMetastoreCreateBackupOperator(BaseOperator):
         return Backup.to_dict(backup)
 
 
-class DataprocMetastoreCreateMetadataImportOperator(BaseOperator):
-    """
-    Creates a new MetadataImport in a given project and location.
+class DataprocMetastoreCreateMetadataImportOperator(GoogleCloudBaseOperator):
+    """Create a new MetadataImport in a given project and location.
 
     :param project_id: Required. The ID of the Google Cloud project that the service belongs to.
     :param region: Required. The ID of the Google Cloud region that the service belongs to.
@@ -359,9 +359,8 @@ class DataprocMetastoreCreateMetadataImportOperator(BaseOperator):
         return MetadataImport.to_dict(metadata_import)
 
 
-class DataprocMetastoreCreateServiceOperator(BaseOperator):
-    """
-    Creates a metastore service in a project and location.
+class DataprocMetastoreCreateServiceOperator(GoogleCloudBaseOperator):
+    """Create a metastore service in a project and location.
 
     :param region: Required. The ID of the Google Cloud region that the service belongs to.
     :param project_id: Required. The ID of the Google Cloud project that the service belongs to.
@@ -461,9 +460,8 @@ class DataprocMetastoreCreateServiceOperator(BaseOperator):
         return Service.to_dict(service)
 
 
-class DataprocMetastoreDeleteBackupOperator(BaseOperator):
-    """
-    Deletes a single backup.
+class DataprocMetastoreDeleteBackupOperator(GoogleCloudBaseOperator):
+    """Delete a single backup.
 
     :param project_id: Required. The ID of the Google Cloud project that the backup belongs to.
     :param region: Required. The ID of the Google Cloud region that the backup belongs to.
@@ -546,9 +544,8 @@ class DataprocMetastoreDeleteBackupOperator(BaseOperator):
         self.log.info("Backup %s deleted successfully", self.project_id)
 
 
-class DataprocMetastoreDeleteServiceOperator(BaseOperator):
-    """
-    Deletes a single service.
+class DataprocMetastoreDeleteServiceOperator(GoogleCloudBaseOperator):
+    """Delete a single service.
 
     :param request:  The request object. Request message for
         [DataprocMetastore.DeleteService][google.cloud.metastore.v1.DataprocMetastore.DeleteService].
@@ -604,9 +601,8 @@ class DataprocMetastoreDeleteServiceOperator(BaseOperator):
         self.log.info("Service %s deleted successfully", self.project_id)
 
 
-class DataprocMetastoreExportMetadataOperator(BaseOperator):
-    """
-    Exports metadata from a service.
+class DataprocMetastoreExportMetadataOperator(GoogleCloudBaseOperator):
+    """Export metadata from a service.
 
     :param destination_gcs_folder: A Cloud Storage URI of a folder, in the format
         ``gs://<bucket_name>/<path_inside_bucket>``. A sub-folder
@@ -698,9 +694,10 @@ class DataprocMetastoreExportMetadataOperator(BaseOperator):
         return destination_uri[5:] if destination_uri.startswith("gs://") else destination_uri
 
     def _wait_for_export_metadata(self, hook: DataprocMetastoreHook):
-        """
-        Workaround to check that export was created successfully.
-        We discovered a issue to parse result to MetadataExport inside the SDK
+        """Check that export was created successfully.
+
+        This is a workaround to an issue parsing result to MetadataExport inside
+        the SDK.
         """
         for time_to_wait in exponential_sleep_generator(initial=10, maximum=120):
             sleep(time_to_wait)
@@ -722,9 +719,8 @@ class DataprocMetastoreExportMetadataOperator(BaseOperator):
                 )
 
 
-class DataprocMetastoreGetServiceOperator(BaseOperator):
-    """
-    Gets the details of a single service.
+class DataprocMetastoreGetServiceOperator(GoogleCloudBaseOperator):
+    """Get the details of a single service.
 
     :param region: Required. The ID of the Google Cloud region that the service belongs to.
     :param project_id: Required. The ID of the Google Cloud project that the service belongs to.
@@ -795,9 +791,8 @@ class DataprocMetastoreGetServiceOperator(BaseOperator):
         return Service.to_dict(result)
 
 
-class DataprocMetastoreListBackupsOperator(BaseOperator):
-    """
-    Lists backups in a service.
+class DataprocMetastoreListBackupsOperator(GoogleCloudBaseOperator):
+    """List backups in a service.
 
     :param project_id: Required. The ID of the Google Cloud project that the backup belongs to.
     :param region: Required. The ID of the Google Cloud region that the backup belongs to.
@@ -880,9 +875,8 @@ class DataprocMetastoreListBackupsOperator(BaseOperator):
         return [Backup.to_dict(backup) for backup in backups]
 
 
-class DataprocMetastoreRestoreServiceOperator(BaseOperator):
-    """
-    Restores a service from a backup.
+class DataprocMetastoreRestoreServiceOperator(GoogleCloudBaseOperator):
+    """Restore a service from a backup.
 
     :param project_id: Required. The ID of the Google Cloud project that the service belongs to.
     :param region: Required. The ID of the Google Cloud region that the service belongs to.
@@ -986,9 +980,10 @@ class DataprocMetastoreRestoreServiceOperator(BaseOperator):
         DataprocMetastoreLink.persist(context=context, task_instance=self, url=METASTORE_SERVICE_LINK)
 
     def _wait_for_restore_service(self, hook: DataprocMetastoreHook):
-        """
-        Workaround to check that restore service was finished successfully.
-        We discovered an issue to parse result to Restore inside the SDK
+        """Check that export was created successfully.
+
+        This is a workaround to an issue parsing result to MetadataExport inside
+        the SDK.
         """
         for time_to_wait in exponential_sleep_generator(initial=10, maximum=120):
             sleep(time_to_wait)
@@ -1008,9 +1003,8 @@ class DataprocMetastoreRestoreServiceOperator(BaseOperator):
                 raise AirflowException("Restoring service FAILED")
 
 
-class DataprocMetastoreUpdateServiceOperator(BaseOperator):
-    """
-    Updates the parameters of a single service.
+class DataprocMetastoreUpdateServiceOperator(GoogleCloudBaseOperator):
+    """Update the parameters of a single service.
 
     :param project_id: Required. The ID of the Google Cloud project that the service belongs to.
     :param region: Required. The ID of the Google Cloud region that the service belongs to.

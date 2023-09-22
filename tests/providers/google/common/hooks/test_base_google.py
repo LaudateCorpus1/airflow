@@ -363,6 +363,7 @@ class TestGoogleBaseHook:
         mock_get_creds_and_proj_id.assert_called_once_with(
             key_path=None,
             keyfile_dict=None,
+            credential_config_file=None,
             key_secret_name=None,
             key_secret_project_id=None,
             scopes=self.instance.scopes,
@@ -399,6 +400,7 @@ class TestGoogleBaseHook:
         mock_get_creds_and_proj_id.assert_called_once_with(
             key_path="KEY_PATH.json",
             keyfile_dict=None,
+            credential_config_file=None,
             key_secret_name=None,
             key_secret_project_id=None,
             scopes=self.instance.scopes,
@@ -428,6 +430,7 @@ class TestGoogleBaseHook:
         mock_get_creds_and_proj_id.assert_called_once_with(
             key_path=None,
             keyfile_dict=service_account,
+            credential_config_file=None,
             key_secret_name=None,
             key_secret_project_id=None,
             scopes=self.instance.scopes,
@@ -447,6 +450,7 @@ class TestGoogleBaseHook:
         mock_get_creds_and_proj_id.assert_called_once_with(
             key_path=None,
             keyfile_dict=None,
+            credential_config_file=None,
             key_secret_name=None,
             key_secret_project_id=None,
             scopes=self.instance.scopes,
@@ -482,6 +486,7 @@ class TestGoogleBaseHook:
         mock_get_creds_and_proj_id.assert_called_once_with(
             key_path=None,
             keyfile_dict=None,
+            credential_config_file=None,
             key_secret_name=None,
             key_secret_project_id=None,
             scopes=self.instance.scopes,
@@ -519,12 +524,7 @@ class TestGoogleBaseHook:
         self.instance.extras = {
             "project": default_project,
             "scope": (
-                ",".join(
-                    (
-                        "https://www.googleapis.com/auth/bigquery",
-                        "https://www.googleapis.com/auth/devstorage.read_only",
-                    )
-                )
+                "https://www.googleapis.com/auth/bigquery,https://www.googleapis.com/auth/devstorage.read_only"
             ),
         }
 
@@ -586,12 +586,7 @@ class TestGoogleBaseHook:
         self.instance.extras = {
             "project": default_project,
             "scope": (
-                ",".join(
-                    (
-                        "https://www.googleapis.com/auth/bigquery",
-                        "https://www.googleapis.com/auth/devstorage.read_only",
-                    )
-                )
+                "https://www.googleapis.com/auth/bigquery,https://www.googleapis.com/auth/devstorage.read_only"
             ),
         }
 
@@ -656,15 +651,36 @@ class TestGoogleBaseHook:
         assert http_authorized.timeout is not None
 
     @pytest.mark.parametrize(
-        "impersonation_chain, target_principal, delegates",
+        "impersonation_chain, impersonation_chain_from_conn, target_principal, delegates",
         [
-            pytest.param("ACCOUNT_1", "ACCOUNT_1", None, id="string"),
-            pytest.param(["ACCOUNT_1"], "ACCOUNT_1", [], id="single_element_list"),
+            pytest.param("ACCOUNT_1", None, "ACCOUNT_1", None, id="string"),
+            pytest.param(None, "ACCOUNT_1", "ACCOUNT_1", None, id="string_in_conn"),
+            pytest.param("ACCOUNT_2", "ACCOUNT_1", "ACCOUNT_2", None, id="string_with_override"),
+            pytest.param(["ACCOUNT_1"], None, "ACCOUNT_1", [], id="single_element_list"),
+            pytest.param(None, ["ACCOUNT_1"], "ACCOUNT_1", [], id="single_element_list_in_conn"),
+            pytest.param(
+                ["ACCOUNT_1"], ["ACCOUNT_2"], "ACCOUNT_1", [], id="single_element_list_with_override"
+            ),
             pytest.param(
                 ["ACCOUNT_1", "ACCOUNT_2", "ACCOUNT_3"],
+                None,
                 "ACCOUNT_3",
                 ["ACCOUNT_1", "ACCOUNT_2"],
                 id="multiple_elements_list",
+            ),
+            pytest.param(
+                None,
+                ["ACCOUNT_1", "ACCOUNT_2", "ACCOUNT_3"],
+                "ACCOUNT_3",
+                ["ACCOUNT_1", "ACCOUNT_2"],
+                id="multiple_elements_list_in_conn",
+            ),
+            pytest.param(
+                ["ACCOUNT_2", "ACCOUNT_3", "ACCOUNT_4"],
+                ["ACCOUNT_1", "ACCOUNT_2", "ACCOUNT_3"],
+                "ACCOUNT_4",
+                ["ACCOUNT_2", "ACCOUNT_3"],
+                id="multiple_elements_list_with_override",
             ),
         ],
     )
@@ -673,16 +689,19 @@ class TestGoogleBaseHook:
         self,
         mock_get_creds_and_proj_id,
         impersonation_chain,
+        impersonation_chain_from_conn,
         target_principal,
         delegates,
     ):
         mock_credentials = mock.MagicMock()
         mock_get_creds_and_proj_id.return_value = (mock_credentials, PROJECT_ID)
         self.instance.impersonation_chain = impersonation_chain
+        self.instance.extras = {"impersonation_chain": impersonation_chain_from_conn}
         result = self.instance.get_credentials_and_project_id()
         mock_get_creds_and_proj_id.assert_called_once_with(
             key_path=None,
             keyfile_dict=None,
+            credential_config_file=None,
             key_secret_name=None,
             key_secret_project_id=None,
             scopes=self.instance.scopes,

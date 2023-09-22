@@ -14,19 +14,41 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Mask sensitive information from logs"""
+"""Mask sensitive information from logs."""
 from __future__ import annotations
 
-import collections
+import collections.abc
 import logging
-import re
 import sys
-from typing import Any, Callable, Dict, Generator, Iterable, List, TextIO, Tuple, TypeVar, Union
+from enum import Enum
+from functools import cached_property
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    Iterable,
+    Iterator,
+    List,
+    Pattern,
+    TextIO,
+    Tuple,
+    TypeVar,
+    Union,
+)
+
+import re2
 
 from airflow import settings
-from airflow.compat.functools import cache, cached_property
+from airflow.compat.functools import cache
 
-Redactable = TypeVar("Redactable", str, Dict[Any, Any], Tuple[Any, ...], List[Any])
+if TYPE_CHECKING:
+    from kubernetes.client import V1EnvVar
+
+    from airflow.typing_compat import TypeGuard
+
+Redactable = TypeVar("Redactable", str, "V1EnvVar", Dict[Any, Any], Tuple[Any, ...], List[Any])
 Redacted = Union[Redactable, str]
 
 log = logging.getLogger(__name__)
@@ -65,7 +87,11 @@ def get_sensitive_variables_fields():
 
 
 def should_hide_value_for_key(name):
-    """Should the value for this given name (Variable name, or key in conn.extra_dejson) be hidden"""
+    """
+    Return if the value for this given name should be hidden.
+
+    Name might be a Variable name, or key in conn.extra_dejson, for example.
+    """
     from airflow import settings
 
     if isinstance(name, str) and settings.HIDE_SENSITIVE_VAR_CONN_FIELDS:
@@ -92,9 +118,9 @@ def mask_secret(secret: str | dict | Iterable, name: str | None = None) -> None:
     _secrets_masker().add_mask(secret, name)
 
 
-def redact(value: Redactable, name: str | None = None) -> Redacted:
+def redact(value: Redactable, name: str | None = None, max_depth: int | None = None) -> Redacted:
     """Redact any secrets found in ``value``."""
-    return _secrets_masker().redact(value, name)
+    return _secrets_masker().redact(value, name, max_depth)
 
 
 @cache
@@ -110,10 +136,23 @@ def _secrets_masker() -> SecretsMasker:
     )
 
 
-class SecretsMasker(logging.Filter):
-    """Redact secrets from logs"""
+@cache
+def _get_v1_env_var_type() -> type:
+    try:
+        from kubernetes.client import V1EnvVar
+    except ImportError:
+        return type("V1EnvVar", (), {})
+    return V1EnvVar
 
-    replacer: re.Pattern | None = None
+
+def _is_v1_env_var(v: Any) -> TypeGuard[V1EnvVar]:
+    return isinstance(v, _get_v1_env_var_type())
+
+
+class SecretsMasker(logging.Filter):
+    """Redact secrets from logs."""
+
+    replacer: Pattern | None = None
     patterns: set[str]
 
     ALREADY_FILTERED_FLAG = "__SecretsMasker_filtered"
@@ -138,7 +177,7 @@ class SecretsMasker(logging.Filter):
             __file__,
             1,
             "",
-            tuple(),
+            (),
             exc_info=None,
             func="funcname",
         )
@@ -167,9 +206,8 @@ class SecretsMasker(logging.Filter):
 
         if self.replacer:
             for k, v in record.__dict__.items():
-                if k in self._record_attrs_to_ignore:
-                    continue
-                record.__dict__[k] = self.redact(v)
+                if k not in self._record_attrs_to_ignore:
+                    record.__dict__[k] = self.redact(v)
             if record.exc_info and record.exc_info[1] is not None:
                 exc = record.exc_info[1]
                 self._redact_exception_with_context(exc)
@@ -177,33 +215,47 @@ class SecretsMasker(logging.Filter):
 
         return True
 
-    def _redact_all(self, item: Redactable, depth: int) -> Redacted:
-        if depth > self.MAX_RECURSION_DEPTH or isinstance(item, str):
+    # Default on `max_depth` is to support versions of the OpenLineage plugin (not the provider) which called
+    # this function directly. New versions of that provider, and this class itself call it with a value
+    def _redact_all(self, item: Redactable, depth: int, max_depth: int = MAX_RECURSION_DEPTH) -> Redacted:
+        if depth > max_depth or isinstance(item, str):
             return "***"
         if isinstance(item, dict):
-            return {dict_key: self._redact_all(subval, depth + 1) for dict_key, subval in item.items()}
+            return {
+                dict_key: self._redact_all(subval, depth + 1, max_depth) for dict_key, subval in item.items()
+            }
         elif isinstance(item, (tuple, set)):
             # Turn set in to tuple!
-            return tuple(self._redact_all(subval, depth + 1) for subval in item)
+            return tuple(self._redact_all(subval, depth + 1, max_depth) for subval in item)
         elif isinstance(item, list):
-            return list(self._redact_all(subval, depth + 1) for subval in item)
+            return list(self._redact_all(subval, depth + 1, max_depth) for subval in item)
         else:
             return item
 
-    def _redact(self, item: Redactable, name: str | None, depth: int) -> Redacted:
+    def _redact(self, item: Redactable, name: str | None, depth: int, max_depth: int) -> Redacted:
         # Avoid spending too much effort on redacting on deeply nested
         # structures. This also avoid infinite recursion if a structure has
         # reference to self.
-        if depth > self.MAX_RECURSION_DEPTH:
+        if depth > max_depth:
             return item
         try:
             if name and should_hide_value_for_key(name):
-                return self._redact_all(item, depth)
+                return self._redact_all(item, depth, max_depth)
             if isinstance(item, dict):
-                return {
-                    dict_key: self._redact(subval, name=dict_key, depth=(depth + 1))
+                to_return = {
+                    dict_key: self._redact(subval, name=dict_key, depth=(depth + 1), max_depth=max_depth)
                     for dict_key, subval in item.items()
                 }
+                return to_return
+            elif isinstance(item, Enum):
+                return self._redact(item=item.value, name=name, depth=depth, max_depth=max_depth)
+            elif _is_v1_env_var(item):
+                tmp: dict = item.to_dict()
+                if should_hide_value_for_key(tmp.get("name", "")) and "value" in tmp:
+                    tmp["value"] = "***"
+                else:
+                    return self._redact(item=tmp, name=name, depth=depth, max_depth=max_depth)
+                return tmp
             elif isinstance(item, str):
                 if self.replacer:
                     # We can't replace specific values, but the key-based redacting
@@ -213,32 +265,36 @@ class SecretsMasker(logging.Filter):
                 return item
             elif isinstance(item, (tuple, set)):
                 # Turn set in to tuple!
-                return tuple(self._redact(subval, name=None, depth=(depth + 1)) for subval in item)
+                return tuple(
+                    self._redact(subval, name=None, depth=(depth + 1), max_depth=max_depth) for subval in item
+                )
             elif isinstance(item, list):
-                return [self._redact(subval, name=None, depth=(depth + 1)) for subval in item]
+                return [
+                    self._redact(subval, name=None, depth=(depth + 1), max_depth=max_depth) for subval in item
+                ]
             else:
                 return item
         # I think this should never happen, but it does not hurt to leave it just in case
         # Well. It happened (see https://github.com/apache/airflow/issues/19816#issuecomment-983311373)
         # but it caused infinite recursion, so we need to cast it to str first.
-        except Exception as e:
+        except Exception as exc:
             log.warning(
-                "Unable to redact %s, please report this via <https://github.com/apache/airflow/issues>. "
+                "Unable to redact %r, please report this via <https://github.com/apache/airflow/issues>. "
                 "Error was: %s: %s",
-                repr(item),
-                type(e).__name__,
-                str(e),
+                item,
+                type(exc).__name__,
+                exc,
             )
             return item
 
-    def redact(self, item: Redactable, name: str | None = None) -> Redacted:
+    def redact(self, item: Redactable, name: str | None = None, max_depth: int | None = None) -> Redacted:
         """Redact an any secrets found in ``item``, if it is a string.
 
         If ``name`` is given, and it's a "sensitive" name (see
         :func:`should_hide_value_for_key`) then all string values in the item
         is redacted.
         """
-        return self._redact(item, name, depth=0)
+        return self._redact(item, name, depth=0, max_depth=max_depth or self.MAX_RECURSION_DEPTH)
 
     @cached_property
     def _mask_adapter(self) -> None | Callable:
@@ -261,7 +317,7 @@ class SecretsMasker(logging.Filter):
         return conf.getboolean("core", "unit_test_mode")
 
     def _adaptations(self, secret: str) -> Generator[str, None, None]:
-        """Yields the secret along with any adaptations to the secret that should be masked."""
+        """Yield the secret along with any adaptations to the secret that should be masked."""
         yield secret
 
         if self._mask_adapter:
@@ -285,13 +341,13 @@ class SecretsMasker(logging.Filter):
             new_mask = False
             for s in self._adaptations(secret):
                 if s:
-                    pattern = re.escape(s)
+                    pattern = re2.escape(s)
                     if pattern not in self.patterns and (not name or should_hide_value_for_key(name)):
                         self.patterns.add(pattern)
                         new_mask = True
 
             if new_mask:
-                self.replacer = re.compile("|".join(self.patterns))
+                self.replacer = re2.compile("|".join(self.patterns))
 
         elif isinstance(secret, collections.abc.Iterable):
             for v in secret:
@@ -309,11 +365,61 @@ class RedactedIO(TextIO):
 
     def __init__(self):
         self.target = sys.stdout
-        self.fileno = sys.stdout.fileno
+
+    def __enter__(self) -> TextIO:
+        return self.target.__enter__()
+
+    def __exit__(self, t, v, b) -> None:
+        return self.target.__exit__(t, v, b)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.target)
+
+    def __next__(self) -> str:
+        return next(self.target)
+
+    def close(self) -> None:
+        return self.target.close()
+
+    def fileno(self) -> int:
+        return self.target.fileno()
+
+    def flush(self) -> None:
+        return self.target.flush()
+
+    def isatty(self) -> bool:
+        return self.target.isatty()
+
+    def read(self, n: int = -1) -> str:
+        return self.target.read(n)
+
+    def readable(self) -> bool:
+        return self.target.readable()
+
+    def readline(self, n: int = -1) -> str:
+        return self.target.readline(n)
+
+    def readlines(self, n: int = -1) -> list[str]:
+        return self.target.readlines(n)
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        return self.target.seek(offset, whence)
+
+    def seekable(self) -> bool:
+        return self.target.seekable()
+
+    def tell(self) -> int:
+        return self.target.tell()
+
+    def truncate(self, s: int | None = None) -> int:
+        return self.target.truncate(s)
+
+    def writable(self) -> bool:
+        return self.target.writable()
 
     def write(self, s: str) -> int:
         s = redact(s)
         return self.target.write(s)
 
-    def flush(self) -> None:
-        return self.target.flush()
+    def writelines(self, lines) -> None:
+        self.target.writelines(lines)

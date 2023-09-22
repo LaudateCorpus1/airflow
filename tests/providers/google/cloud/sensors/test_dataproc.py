@@ -16,7 +16,6 @@
 # under the License.
 from __future__ import annotations
 
-import unittest
 from unittest import mock
 from unittest.mock import Mock
 
@@ -24,7 +23,7 @@ import pytest
 from google.api_core.exceptions import ServerError
 from google.cloud.dataproc_v1.types import Batch, JobStatus
 
-from airflow import AirflowException
+from airflow.exceptions import AirflowException
 from airflow.providers.google.cloud.sensors.dataproc import DataprocBatchSensor, DataprocJobSensor
 from airflow.version import version as airflow_version
 
@@ -39,7 +38,7 @@ GCP_CONN_ID = "test-conn"
 TIMEOUT = 120
 
 
-class TestDataprocJobSensor(unittest.TestCase):
+class TestDataprocJobSensor:
     def create_job(self, state: int):
         job = mock.Mock()
         job.status = mock.Mock()
@@ -186,7 +185,7 @@ class TestDataprocJobSensor(unittest.TestCase):
             sensor.poke(context={})
 
 
-class TestDataprocBatchSensor(unittest.TestCase):
+class TestDataprocBatchSensor:
     def create_batch(self, state: int):
         batch = mock.Mock()
         batch.state = mock.Mock()

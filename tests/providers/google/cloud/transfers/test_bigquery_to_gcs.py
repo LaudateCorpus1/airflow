@@ -17,7 +17,6 @@
 # under the License.
 from __future__ import annotations
 
-import unittest
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -32,9 +31,10 @@ TASK_ID = "test-bq-create-table-operator"
 TEST_DATASET = "test-dataset"
 TEST_TABLE_ID = "test-table-id"
 PROJECT_ID = "test-project-id"
+JOB_PROJECT_ID = "job-project-id"
 
 
-class TestBigQueryToGCSOperator(unittest.TestCase):
+class TestBigQueryToGCSOperator:
     @mock.patch("airflow.providers.google.cloud.transfers.bigquery_to_gcs.BigQueryHook")
     def test_execute(self, mock_hook):
         source_project_dataset_table = f"{PROJECT_ID}:{TEST_DATASET}.{TEST_TABLE_ID}"
@@ -67,7 +67,7 @@ class TestBigQueryToGCSOperator(unittest.TestCase):
         mock_hook.return_value.split_tablename.return_value = (PROJECT_ID, TEST_DATASET, TEST_TABLE_ID)
         mock_hook.return_value.generate_job_id.return_value = real_job_id
         mock_hook.return_value.insert_job.return_value = MagicMock(job_id="real_job_id", error_result=False)
-        mock_hook.return_value.project_id = PROJECT_ID
+        mock_hook.return_value.project_id = JOB_PROJECT_ID
 
         operator = BigQueryToGCSOperator(
             task_id=TASK_ID,
@@ -78,17 +78,18 @@ class TestBigQueryToGCSOperator(unittest.TestCase):
             field_delimiter=field_delimiter,
             print_header=print_header,
             labels=labels,
+            project_id=JOB_PROJECT_ID,
         )
         operator.execute(context=mock.MagicMock())
 
         mock_hook.return_value.insert_job.assert_called_once_with(
             job_id="123456_hash",
             configuration=expected_configuration,
-            project_id=PROJECT_ID,
+            project_id=JOB_PROJECT_ID,
             location=None,
             timeout=None,
             retry=DEFAULT_RETRY,
-            nowait=True,
+            nowait=False,
         )
 
     @mock.patch("airflow.providers.google.cloud.transfers.bigquery_to_gcs.BigQueryHook")
@@ -123,10 +124,10 @@ class TestBigQueryToGCSOperator(unittest.TestCase):
         mock_hook.return_value.split_tablename.return_value = (PROJECT_ID, TEST_DATASET, TEST_TABLE_ID)
         mock_hook.return_value.generate_job_id.return_value = real_job_id
         mock_hook.return_value.insert_job.return_value = MagicMock(job_id="real_job_id", error_result=False)
-        mock_hook.return_value.project_id = PROJECT_ID
+        mock_hook.return_value.project_id = JOB_PROJECT_ID
 
         operator = BigQueryToGCSOperator(
-            project_id=PROJECT_ID,
+            project_id=JOB_PROJECT_ID,
             task_id=TASK_ID,
             source_project_dataset_table=source_project_dataset_table,
             destination_cloud_storage_uris=destination_cloud_storage_uris,
@@ -147,7 +148,7 @@ class TestBigQueryToGCSOperator(unittest.TestCase):
         mock_hook.return_value.insert_job.assert_called_once_with(
             configuration=expected_configuration,
             job_id="123456_hash",
-            project_id=PROJECT_ID,
+            project_id=JOB_PROJECT_ID,
             location=None,
             timeout=None,
             retry=DEFAULT_RETRY,

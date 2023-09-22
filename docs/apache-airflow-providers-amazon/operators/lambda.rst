@@ -28,7 +28,7 @@ You can set up your code to automatically trigger from other AWS services or cal
 Prerequisite Tasks
 ------------------
 
-.. include:: _partials/prerequisite_tasks.rst
+.. include:: ../_partials/prerequisite_tasks.rst
 
 Operators
 ---------
@@ -40,6 +40,8 @@ Create an AWS Lambda function
 
 To create an AWS lambda function you can use
 :class:`~airflow.providers.amazon.aws.operators.lambda_function.LambdaCreateFunctionOperator`.
+This operator can be run in deferrable mode by passing ``deferrable=True`` as a parameter. This requires
+the aiobotocore module to be installed.
 
 .. exampleinclude:: /../../tests/system/providers/amazon/aws/example_lambda.py
     :language: python
@@ -47,13 +49,13 @@ To create an AWS lambda function you can use
     :start-after: [START howto_operator_create_lambda_function]
     :end-before: [END howto_operator_create_lambda_function]
 
-.. _howto/operator:AwsLambdaInvokeFunctionOperator:
+.. _howto/operator:LambdaInvokeFunctionOperator:
 
 Invoke an AWS Lambda function
 =============================
 
 To invoke an AWS lambda function you can use
-:class:`~airflow.providers.amazon.aws.operators.lambda_function.AwsLambdaInvokeFunctionOperator`.
+:class:`~airflow.providers.amazon.aws.operators.lambda_function.LambdaInvokeFunctionOperator`.
 
 .. exampleinclude:: /../../tests/system/providers/amazon/aws/example_lambda.py
     :language: python

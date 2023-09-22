@@ -27,16 +27,17 @@ if TYPE_CHECKING:
 
 
 class JiraOperator(BaseOperator):
-    """
-    JiraOperator to interact and perform action on Jira issue tracking system.
-    This operator is designed to use Atlassian Jira SDK: https://atlassian-python-api.readthedocs.io/jira.html
+    """JiraOperator to interact and perform action on Jira issue tracking system.
 
-    :param jira_conn_id: reference to a pre-defined Jira Connection
-    :param jira_method: method name from Atlassian Jira Python SDK to be called
-    :param jira_method_args: required method parameters for the jira_method. (templated)
-    :param result_processor: function to further process the response from Jira
-    :param get_jira_resource_method: function or operator to get jira resource
-                                    on which the provided jira_method will be executed
+    This operator is designed to use Atlassian Jira SDK. For more information:
+    https://atlassian-python-api.readthedocs.io/jira.html
+
+    :param jira_conn_id: Reference to a pre-defined Jira Connection.
+    :param jira_method: Method name from Atlassian Jira Python SDK to be called.
+    :param jira_method_args: Method parameters for the jira_method. (templated)
+    :param result_processor: Function to further process the response from Jira.
+    :param get_jira_resource_method: Function or operator to get Jira resource on which the provided
+        jira_method will be executed.
     """
 
     template_fields: Sequence[str] = ("jira_method_args",)
@@ -54,7 +55,7 @@ class JiraOperator(BaseOperator):
         super().__init__(**kwargs)
         self.jira_conn_id = jira_conn_id
         self.method_name = jira_method
-        self.jira_method_args = jira_method_args
+        self.jira_method_args = jira_method_args or {}
         self.result_processor = result_processor
         self.get_jira_resource_method = get_jira_resource_method
 
@@ -74,9 +75,9 @@ class JiraOperator(BaseOperator):
             hook = JiraHook(jira_conn_id=self.jira_conn_id)
             resource = hook.client
 
-        jira_result = getattr(resource, self.method_name)(**self.jira_method_args)
+        jira_result: Any = getattr(resource, self.method_name)(**self.jira_method_args)
 
-        output = jira_result.get("id", None) if jira_result is not None else None
+        output = jira_result.get("id", None) if isinstance(jira_result, dict) else None
         self.xcom_push(context, key="id", value=output)
 
         if self.result_processor:

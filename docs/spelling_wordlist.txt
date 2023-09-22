@@ -13,9 +13,14 @@ acyclic
 AddressesType
 adhoc
 adls
+adobjects
+AdsInsights
+adsinsights
 afterall
 AgentKey
 aio
+aiobotocore
+AioSession
 Airbnb
 airbnb
 Airbyte
@@ -29,7 +34,9 @@ Alibaba
 alibaba
 allAuthenticatedUsers
 allowinsert
+allowlist
 allUsers
+alphanumerics
 Alphasort
 amazonaws
 amqp
@@ -148,6 +155,7 @@ BaseView
 BaseXCom
 bashrc
 batchGet
+BatchServiceClient
 bc
 bcc
 bdist
@@ -284,18 +292,22 @@ conn
 connectTimeoutMS
 connexion
 containerConfiguration
+containerd
 ContainerGroup
 containerinstance
 ContainerPort
 contentUrl
 contextmgr
 contrib
+CoreV
+coroutine
 coverals
 cp
 cpu
 cpus
 crd
 createDisposition
+CreateQueryOperator
 creationTimestamp
 credssp
 Cron
@@ -315,6 +327,7 @@ customDataImportUids
 customizability
 customizable
 customizations
+cwd
 cx
 Daemonize
 daemonize
@@ -325,6 +338,7 @@ dagbags
 DagCallbackRequest
 DagFileProcessorManager
 dagmodel
+DagParam
 Dagre
 dagre
 DagRun
@@ -334,6 +348,7 @@ DagRunState
 DAGs
 Dask
 dask
+daskexecutor
 dat
 Databricks
 databricks
@@ -360,8 +375,12 @@ datapoint
 Dataprep
 Dataproc
 dataproc
+DataScan
+dataScans
 Dataset
 dataset
+DatasetEvent
+DatasetEvents
 datasetId
 Datasets
 datasets
@@ -375,6 +394,7 @@ DataTransferServiceClient
 datatypes
 DateFrame
 datestamp
+DateTime
 datetime
 Datetimepicker
 Datetimes
@@ -415,12 +435,14 @@ deps
 deques
 deregister
 desc
+descendents
 deserialization
 Deserialize
 deserialize
 Deserialized
 deserialized
 deserializer
+deserializes
 deserializing
 dest
 dev
@@ -439,6 +461,7 @@ discoverability
 discoverable
 diskTypes
 displayName
+DisplayVideo
 distcp
 distro
 distros
@@ -465,12 +488,16 @@ dogstatsd
 donot
 Dont
 DOS'ing
+DownloadReportV
 downscaling
+downstreams
+dq
 Drillbit
 Drivy
 dropdown
 druidHook
 ds
+dsl
 Dsn
 dsn
 dttm
@@ -497,6 +524,7 @@ emr
 EmrAddSteps
 EmrCreateJobFlow
 enableAutoScale
+encodable
 encryptor
 enqueue
 enqueued
@@ -582,6 +610,7 @@ fn
 fo
 followsa
 formatter
+formatters
 Formaturas
 forwardability
 forwardable
@@ -589,6 +618,7 @@ fqdn
 frontend
 fs
 fsGroup
+fullname
 func
 Fundera
 ga
@@ -634,6 +664,7 @@ golang
 googleads
 GoogleAdsRow
 googleapiclient
+GoogleDisplayVideo
 gpu
 gpus
 greenlet
@@ -656,6 +687,7 @@ Harenslak
 Hashable
 Hashicorp
 hashicorp
+hashlib
 hasn
 HCatalog
 hcatalog
@@ -744,6 +776,7 @@ InspectContentResponse
 InspectTemplate
 instafail
 installable
+InstanceGroupConfig
 instanceTemplates
 instantiation
 integrations
@@ -760,6 +793,7 @@ isfile
 ish
 isn
 isort
+istio
 iterable
 iterables
 iteratively
@@ -802,6 +836,8 @@ jthomas
 Jupyter
 jupyter
 jupytercmd
+Kafka
+kafka
 Kalibrr
 Kamil
 KEDA
@@ -841,6 +877,7 @@ kwargs
 KYLIN
 Kylin
 kylin
+Lakehouse
 LanguageServiceClient
 lastname
 latencies
@@ -862,11 +899,8 @@ LineItem
 lineterminator
 linter
 linux
-ListColumnSpecsPager
-ListDatasetsPager
 ListGenerator
 ListInfoTypesResponse
-ListTableSpecsPager
 Liveness
 liveness
 livy
@@ -914,6 +948,7 @@ metadatabase
 metarouter
 Metastore
 metastore
+metavar
 mget
 mgmt
 microservice
@@ -1014,8 +1049,11 @@ onboarded
 OnFailure
 onkill
 Oozie
+openapi
 openfaas
+openlineage
 oper
+OperatorLineage
 Opsgenie
 opsgenie
 Optimise
@@ -1030,10 +1068,13 @@ os
 OSS
 oss
 ot
+otel
 overridable
 oversubscription
+PaaS
 Pagerduty
 pagerduty
+PagerdutyEventsHook
 pageviews
 paginator
 Papermill
@@ -1078,7 +1119,9 @@ pluggable
 pluggy
 plyvel
 png
+PodManager
 podName
+PodSpec
 podSpec
 podspec
 poller
@@ -1101,6 +1144,9 @@ precheck
 Precommit
 preconfigured
 PredictionServiceClient
+Preemptibility
+preemptibility
+Preemptible
 preemptible
 prefetch
 prefetched
@@ -1183,6 +1229,7 @@ RBAC
 rbac
 rc
 rdbms
+RDS
 readfp
 Readme
 readme
@@ -1200,6 +1247,7 @@ redbubble
 Reddit
 Redhat
 redis
+rediss
 redoc
 redownloading
 redshift
@@ -1250,6 +1298,8 @@ rtype
 ru
 runAsUser
 runnable
+RunQueryOperator
+RunQuerySensor
 runspace
 RunSubmitTaskSettings
 runtime
@@ -1332,6 +1382,7 @@ sourceArchiveUrl
 sourceRepository
 sourceUploadUrl
 Spark
+sparkappinfo
 sparkApplication
 sparkcmd
 SparkPi
@@ -1368,7 +1419,6 @@ ssm
 Stackdriver
 stackdriver
 stacktrace
-StartManualTransferRunsResponse
 starttls
 StatefulSet
 StatefulSets
@@ -1400,7 +1450,7 @@ Subdirectory
 subdirectory
 subfolder
 subfolders
-Submodules
+submodule
 submodules
 subnet
 subnets
@@ -1435,7 +1485,6 @@ symlink
 symlinking
 symlinks
 sync'ed
-SynthesizeSpeechResponse
 sys
 syspath
 Systemd
@@ -1465,6 +1514,7 @@ tblproperties
 TCP
 tcp
 teardown
+teardowns
 templatable
 templateable
 Templated
@@ -1507,8 +1557,6 @@ tooltip
 tooltips
 traceback
 tracebacks
-TransferConfig
-TransferRun
 travis
 triage
 triaging
@@ -1532,6 +1580,7 @@ tzinfo
 UA
 ui
 uid
+ulimit
 Umask
 umask
 Un
@@ -1543,6 +1592,8 @@ undead
 Undeads
 ungenerated
 unicode
+unicodecsv
+unindent
 unittest
 unittests
 unix
@@ -1561,6 +1612,7 @@ unprocessable
 unqueued
 unterminated
 untransformed
+untrusted
 unutilized
 updateMask
 updateonly
@@ -1568,6 +1620,7 @@ Upsert
 upsert
 upserts
 Upsight
+upstreams
 Uptime
 uri
 uris
@@ -1575,6 +1628,7 @@ Url
 url
 urlencoded
 urlparse
+urls
 useHCatalog
 useLegacySQL
 useQueryCache
@@ -1595,6 +1649,7 @@ vCPU
 ve
 vendored
 Vendorize
+venv
 venvs
 versionable
 Vertica
@@ -1604,6 +1659,7 @@ Vevo
 videointelligence
 VideoIntelligenceServiceClient
 virtualenv
+virtualenvs
 vm
 VolumeMount
 volumeMounts
@@ -1618,6 +1674,7 @@ Webhook
 webhook
 WebhookClient
 webhooks
+webpack
 webpage
 webProperty
 Webserver

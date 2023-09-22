@@ -22,7 +22,7 @@ from typing import Any
 
 import yandexcloud
 
-from airflow.exceptions import AirflowException
+from airflow.exceptions import AirflowException, AirflowProviderDeprecationWarning
 from airflow.hooks.base import BaseHook
 
 
@@ -40,7 +40,7 @@ class YandexCloudBaseHook(BaseHook):
 
     @staticmethod
     def get_connection_form_widgets() -> dict[str, Any]:
-        """Returns connection widgets to add to connection form"""
+        """Returns connection widgets to add to connection form."""
         from flask_appbuilder.fieldwidgets import BS3PasswordFieldWidget, BS3TextFieldWidget
         from flask_babel import lazy_gettext
         from wtforms import PasswordField, StringField
@@ -78,11 +78,16 @@ class YandexCloudBaseHook(BaseHook):
                 description="Optional. This key will be placed to all created Compute nodes"
                 "to let you have a root shell there",
             ),
+            "endpoint": StringField(
+                lazy_gettext("API endpoint"),
+                widget=BS3TextFieldWidget(),
+                description="Optional. Specify an API endpoint. Leave blank to use default.",
+            ),
         }
 
     @classmethod
     def provider_user_agent(cls) -> str | None:
-        """Construct User-Agent from Airflow core & provider package versions"""
+        """Construct User-Agent from Airflow core & provider package versions."""
         import airflow
         from airflow.providers_manager import ProvidersManager
 
@@ -97,7 +102,7 @@ class YandexCloudBaseHook(BaseHook):
 
     @staticmethod
     def get_ui_field_behaviour() -> dict[str, Any]:
-        """Returns custom field behaviour"""
+        """Returns custom field behaviour."""
         return {
             "hidden_fields": ["host", "schema", "login", "password", "port", "extra"],
             "relabeling": {},
@@ -115,14 +120,15 @@ class YandexCloudBaseHook(BaseHook):
         if connection_id:
             warnings.warn(
                 "Using `connection_id` is deprecated. Please use `yandex_conn_id` parameter.",
-                DeprecationWarning,
+                AirflowProviderDeprecationWarning,
                 stacklevel=2,
             )
         self.connection_id = yandex_conn_id or connection_id or self.default_conn_name
         self.connection = self.get_connection(self.connection_id)
         self.extras = self.connection.extra_dejson
         credentials = self._get_credentials()
-        self.sdk = yandexcloud.SDK(user_agent=self.provider_user_agent(), **credentials)
+        sdk_config = self._get_endpoint()
+        self.sdk = yandexcloud.SDK(user_agent=self.provider_user_agent(), **sdk_config, **credentials)
         self.default_folder_id = default_folder_id or self._get_field("folder_id", False)
         self.default_public_ssh_key = default_public_ssh_key or self._get_field("public_ssh_key", False)
         self.client = self.sdk.client
@@ -144,6 +150,13 @@ class YandexCloudBaseHook(BaseHook):
             return {"service_account_key": service_account_key}
         else:
             return {"token": oauth_token}
+
+    def _get_endpoint(self) -> dict[str, str]:
+        sdk_config = {}
+        endpoint = self._get_field("endpoint", None)
+        if endpoint:
+            sdk_config["endpoint"] = endpoint
+        return sdk_config
 
     def _get_field(self, field_name: str, default: Any = None) -> Any:
         """Get field from extra, first checking short name, then for backcompat we check for prefixed name."""

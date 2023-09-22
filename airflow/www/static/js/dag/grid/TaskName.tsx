@@ -17,12 +17,9 @@
  * under the License.
  */
 
-import React from 'react';
-import {
-  Text,
-  Flex,
-} from '@chakra-ui/react';
-import { FiChevronUp, FiChevronDown } from 'react-icons/fi';
+import React from "react";
+import { Text, Flex } from "@chakra-ui/react";
+import { FiChevronUp, FiChevronDown } from "react-icons/fi";
 
 interface Props {
   isGroup?: boolean;
@@ -31,34 +28,39 @@ interface Props {
   isOpen?: boolean;
   level?: number;
   label: string;
+  id: string;
 }
 
 const TaskName = ({
-  isGroup = false, isMapped = false, onToggle, isOpen = false, level = 0, label,
+  isGroup = false,
+  isMapped = false,
+  onToggle,
+  isOpen = false,
+  level = 0,
+  label,
+  id,
 }: Props) => (
   <Flex
-    as={isGroup ? 'button' : 'div'}
+    as={isGroup ? "button" : "div"}
     onClick={onToggle}
     aria-label={label}
+    data-testid={id}
     title={label}
     mr={4}
     width="100%"
     alignItems="center"
-    fontWeight={isGroup || isMapped ? 'bold' : 'normal'}
+    fontWeight={isGroup || isMapped ? "bold" : "normal"}
   >
-    <Text
-      display="inline"
-      ml={level * 4 + 4}
-      noOfLines={1}
-    >
+    <Text display="inline" ml={level * 4 + 4} noOfLines={1}>
       {label}
-      {isMapped && (
-        ' [ ]'
-      )}
+      {isMapped && " [ ]"}
     </Text>
-    {isGroup && (
-      isOpen ? <FiChevronUp data-testid="close-group" /> : <FiChevronDown data-testid="open-group" />
-    )}
+    {isGroup &&
+      (isOpen ? (
+        <FiChevronUp data-testid="close-group" />
+      ) : (
+        <FiChevronDown data-testid="open-group" />
+      ))}
   </Flex>
 );
 

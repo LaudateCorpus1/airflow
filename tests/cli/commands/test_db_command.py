@@ -17,12 +17,12 @@
 from __future__ import annotations
 
 from unittest import mock
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 import pendulum
 import pytest
-from pytest import param
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.exc import OperationalError
 
 from airflow.cli import cli_parser
 from airflow.cli.commands import db_command
@@ -36,8 +36,8 @@ class TestCliDb:
 
     @mock.patch("airflow.cli.commands.db_command.db.initdb")
     def test_cli_initdb(self, mock_initdb):
-        db_command.initdb(self.parser.parse_args(["db", "init"]))
-
+        with pytest.warns(expected_warning=DeprecationWarning, match="`db init` is deprecated"):
+            db_command.initdb(self.parser.parse_args(["db", "init"]))
         mock_initdb.assert_called_once_with()
 
     @mock.patch("airflow.cli.commands.db_command.db.resetdb")
@@ -101,18 +101,18 @@ class TestCliDb:
     @pytest.mark.parametrize(
         "args, pattern",
         [
-            param(["--to-version", "2.1.25"], "not supported", id="bad version"),
-            param(
+            pytest.param(["--to-version", "2.1.25"], "not supported", id="bad version"),
+            pytest.param(
                 ["--to-revision", "abc", "--from-revision", "abc123"],
                 "used with `--show-sql-only`",
                 id="requires offline",
             ),
-            param(
+            pytest.param(
                 ["--to-revision", "abc", "--from-version", "2.0.2"],
                 "used with `--show-sql-only`",
                 id="requires offline",
             ),
-            param(
+            pytest.param(
                 ["--to-revision", "abc", "--from-version", "2.1.25", "--show-sql-only"],
                 "Unknown version",
                 id="bad version",
@@ -120,9 +120,15 @@ class TestCliDb:
         ],
     )
     @mock.patch("airflow.cli.commands.db_command.db.upgradedb")
-    def test_cli_upgrade_failure(self, mock_upgradedb, args, pattern):
+    def test_cli_sync_failure(self, mock_upgradedb, args, pattern):
         with pytest.raises(SystemExit, match=pattern):
-            db_command.upgradedb(self.parser.parse_args(["db", "upgrade", *args]))
+            db_command.migratedb(self.parser.parse_args(["db", "upgrade", *args]))
+
+    @mock.patch("airflow.cli.commands.db_command.migratedb")
+    def test_cli_upgrade(self, mock_migratedb):
+        with pytest.warns(expected_warning=DeprecationWarning, match="`db upgrade` is deprecated"):
+            db_command.upgradedb(self.parser.parse_args(["db", "upgrade"]))
+        mock_migratedb.assert_called_once()
 
     @mock.patch("airflow.cli.commands.db_command.execute_interactive")
     @mock.patch("airflow.cli.commands.db_command.NamedTemporaryFile")
@@ -271,6 +277,27 @@ class TestCliDb:
             db_command.downgrade(self.parser.parse_args(["db", "downgrade", "--to-revision", "abc"]))
             mock_dg.assert_called_with(to_revision="abc", from_revision=None, show_sql_only=False)
 
+    def test_check(self):
+        retry, retry_delay = 6, 9  # arbitrary but distinct number
+        args = self.parser.parse_args(
+            ["db", "check", "--retry", str(retry), "--retry-delay", str(retry_delay)]
+        )
+        sleep = MagicMock()
+        always_pass = Mock()
+        always_fail = Mock(side_effect=OperationalError("", None, None))
+
+        with patch("time.sleep", new=sleep), patch("airflow.utils.db.check", new=always_pass):
+            db_command.check(args)
+            always_pass.assert_called_once()
+            sleep.assert_not_called()
+
+        with patch("time.sleep", new=sleep), patch("airflow.utils.db.check", new=always_fail):
+            with pytest.raises(OperationalError):
+                db_command.check(args)
+            # With N retries there are N+1 total checks, hence N sleeps
+            always_fail.assert_has_calls([call()] * (retry + 1))
+            sleep.assert_has_calls([call(retry_delay)] * retry)
+
 
 class TestCLIDBClean:
     @classmethod
@@ -285,7 +312,7 @@ class TestCLIDBClean:
         coerced to tz-aware with default timezone
         """
         timestamp = "2021-01-01 00:00:00"
-        with patch("airflow.utils.timezone.TIMEZONE", pendulum.timezone(timezone)):
+        with patch("airflow.settings.TIMEZONE", pendulum.timezone(timezone)):
             args = self.parser.parse_args(["db", "clean", "--clean-before-timestamp", f"{timestamp}", "-y"])
             db_command.cleanup_tables(args)
         run_cleanup_mock.assert_called_once_with(
@@ -304,7 +331,7 @@ class TestCLIDBClean:
         When tz included in the string then default timezone should not be used.
         """
         timestamp = "2021-01-01 00:00:00+03:00"
-        with patch("airflow.utils.timezone.TIMEZONE", pendulum.timezone(timezone)):
+        with patch("airflow.settings.TIMEZONE", pendulum.timezone(timezone)):
             args = self.parser.parse_args(["db", "clean", "--clean-before-timestamp", f"{timestamp}", "-y"])
             db_command.cleanup_tables(args)
 
@@ -463,7 +490,7 @@ class TestCLIDBClean:
         db_command.export_archived(args)
 
         export_archived_mock.assert_called_once_with(
-            export_format="csv", output_path="path", table_names=None, drop_archives=False
+            export_format="csv", output_path="path", table_names=None, drop_archives=False, needs_confirm=True
         )
 
     @pytest.mark.parametrize(
@@ -485,7 +512,11 @@ class TestCLIDBClean:
         )
         db_command.export_archived(args)
         export_archived_mock.assert_called_once_with(
-            export_format="csv", output_path="path", table_names=expected, drop_archives=False
+            export_format="csv",
+            output_path="path",
+            table_names=expected,
+            drop_archives=False,
+            needs_confirm=True,
         )
 
     @pytest.mark.parametrize("extra_args, expected", [(["--drop-archives"], True), ([], False)])
@@ -505,7 +536,11 @@ class TestCLIDBClean:
         )
         db_command.export_archived(args)
         export_archived_mock.assert_called_once_with(
-            export_format="csv", output_path="path", table_names=None, drop_archives=expected
+            export_format="csv",
+            output_path="path",
+            table_names=None,
+            drop_archives=expected,
+            needs_confirm=True,
         )
 
     @pytest.mark.parametrize(

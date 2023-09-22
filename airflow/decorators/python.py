@@ -16,10 +16,13 @@
 # under the License.
 from __future__ import annotations
 
-from typing import Callable, Sequence
+from typing import TYPE_CHECKING, Callable, Sequence
 
-from airflow.decorators.base import DecoratedOperator, TaskDecorator, task_decorator_factory
+from airflow.decorators.base import DecoratedOperator, task_decorator_factory
 from airflow.operators.python import PythonOperator
+
+if TYPE_CHECKING:
+    from airflow.decorators.base import TaskDecorator
 
 
 class _PythonDecoratedOperator(DecoratedOperator, PythonOperator):
@@ -37,10 +40,6 @@ class _PythonDecoratedOperator(DecoratedOperator, PythonOperator):
 
     template_fields: Sequence[str] = ("templates_dict", "op_args", "op_kwargs")
     template_fields_renderers = {"templates_dict": "json", "op_args": "py", "op_kwargs": "py"}
-
-    # since we won't mutate the arguments, we should just do the shallow copy
-    # there are some cases we can't deepcopy the objects (e.g protobuf).
-    shallow_copy_attrs: Sequence[str] = ("python_callable",)
 
     custom_operator_name: str = "@task"
 
@@ -64,7 +63,8 @@ def python_task(
     multiple_outputs: bool | None = None,
     **kwargs,
 ) -> TaskDecorator:
-    """Wraps a function into an Airflow operator.
+    """
+    Wrap a function into an Airflow operator.
 
     Accepts kwargs for operator kwarg. Can be reused in a single DAG.
 

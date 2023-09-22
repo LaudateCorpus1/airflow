@@ -66,9 +66,16 @@ If you want to learn more about using TaskFlow, you should consult :doc:`the Tas
 Context
 -------
 
-When running your callable, Airflow will pass a set of keyword arguments that can be used in your function. This set of kwargs correspond exactly to the :ref:`context variables<templates:variables>` you can use in your Jinja templates.
+You can access Airflow :ref:`context variables <templates:variables>` by adding them as keyword arguments as shown in the following example:
 
-For this to work, you need to define ``**kwargs`` in your function header, or you can add directly the keyword arguments you would like to get such as ``ti=None`` to have the task instance passed.
+.. include:: ../../shared/template-examples/taskflow.rst
+
+Alternatively, you may add ``**kwargs`` to the signature of your task and all Airflow context variables will be accessible in the ``kwargs`` dict:
+
+.. include:: ../../shared/template-examples/taskflow-kwargs.rst
+
+For a full list of context variables, see :ref:`context variables <templates:variables>`.
+
 
 Logging
 -------
@@ -91,9 +98,10 @@ need to be able to be serialized. Airflow out of the box supports all built-in t
 supports objects that are decorated with ``@dataclass`` or ``@attr.define``. The following example shows the use of
 a ``Dataset``, which is ``@attr.define`` decorated, together with TaskFlow.
 
-::
+.. note::
 
-  Note: An additional benefit of using ``Dataset`` is that it automatically registers as an ``inlet`` in case it is used as an input argument. It also auto registers as an ``outlet`` if the return value of your task is a ``dataset`` or a ``list[Dataset]]``.
+    An additional benefit of using ``Dataset`` is that it automatically registers as an ``inlet`` in case it is used as an input argument. It also auto registers as an ``outlet`` if the return value of your task is a ``dataset`` or a ``list[Dataset]]``.
+
 
 .. code-block:: python
 
@@ -178,9 +186,9 @@ It is good practice to version the objects that will be used in serialization. T
 so that a version 2 is able to deserialize a version 1. In case you need custom logic
 for deserialization ensure that ``deserialize(data: dict, version: int)`` is specified.
 
-::
+.. note::
 
-  Note: Typing of ``__version__`` is required and needs to be ``ClassVar[int]``
+  Typing of ``__version__`` is required and needs to be ``ClassVar[int]``
 
 
 Sensors and the TaskFlow API

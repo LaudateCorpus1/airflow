@@ -17,9 +17,10 @@
 # under the License.
 from __future__ import annotations
 
-import sys
 from asyncio import Future
 from copy import deepcopy
+from unittest import mock
+from unittest.mock import AsyncMock
 
 import pytest
 from google.api_core.gapic_v1.method import DEFAULT
@@ -30,13 +31,6 @@ from airflow.providers.google.cloud.hooks.bigquery_dts import (
     BiqQueryDataTransferServiceHook,
 )
 from tests.providers.google.cloud.utils.base_gcp_mock import mock_base_gcp_hook_no_default_project_id
-
-if sys.version_info < (3, 8):
-    from asynctest import mock
-    from asynctest.mock import CoroutineMock as AsyncMock
-else:
-    from unittest import mock
-    from unittest.mock import AsyncMock
 
 CREDENTIALS = "test-creds"
 PROJECT_ID = "id"
@@ -62,6 +56,10 @@ RUN_ID = "id1234"
 
 
 class TestBigQueryDataTransferHook:
+    def test_delegate_to_runtime_error(self):
+        with pytest.raises(RuntimeError):
+            BiqQueryDataTransferServiceHook(gcp_conn_id="GCP_CONN_ID", delegate_to="delegate_to")
+
     def setup_method(self):
         with mock.patch(
             "airflow.providers.google.cloud.hooks.bigquery_dts.GoogleBaseHook.__init__",
@@ -134,6 +132,10 @@ class TestBigQueryDataTransferHook:
 
 class TestAsyncBiqQueryDataTransferServiceHook:
     HOOK_MODULE_PATH = "airflow.providers.google.cloud.hooks.bigquery_dts"
+
+    def test_delegate_to_runtime_error(self):
+        with pytest.raises(RuntimeError):
+            AsyncBiqQueryDataTransferServiceHook(gcp_conn_id="GCP_CONN_ID", delegate_to="delegate_to")
 
     @pytest.fixture()
     def mock_client(self):

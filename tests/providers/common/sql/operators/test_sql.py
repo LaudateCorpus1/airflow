@@ -64,8 +64,9 @@ class TestSQLExecuteQueryOperator:
             dag=dag,
         )
 
+    @mock.patch.object(SQLExecuteQueryOperator, "_process_output")
     @mock.patch.object(SQLExecuteQueryOperator, "get_db_hook")
-    def test_do_xcom_push(self, mock_get_db_hook):
+    def test_do_xcom_push(self, mock_get_db_hook, mock_process_output):
         operator = self._construct_operator("SELECT 1;", do_xcom_push=True)
         operator.execute(context=MagicMock())
 
@@ -76,9 +77,11 @@ class TestSQLExecuteQueryOperator:
             parameters=None,
             return_last=True,
         )
+        mock_process_output.assert_called()
 
+    @mock.patch.object(SQLExecuteQueryOperator, "_process_output")
     @mock.patch.object(SQLExecuteQueryOperator, "get_db_hook")
-    def test_dont_xcom_push(self, mock_get_db_hook):
+    def test_dont_xcom_push(self, mock_get_db_hook, mock_process_output):
         operator = self._construct_operator("SELECT 1;", do_xcom_push=False)
         operator.execute(context=MagicMock())
 
@@ -89,6 +92,7 @@ class TestSQLExecuteQueryOperator:
             handler=None,
             return_last=True,
         )
+        mock_process_output.assert_not_called()
 
 
 class TestColumnCheckOperator:
@@ -1154,9 +1158,7 @@ class TestSqlBranch:
         for ti in tis:
             if ti.task_id == "make_choice":
                 assert ti.state == State.SUCCESS
-            elif ti.task_id == "branch_1":
-                assert ti.state == State.NONE
-            elif ti.task_id == "branch_2":
+            elif ti.task_id in ("branch_1", "branch_2"):
                 assert ti.state == State.NONE
             elif ti.task_id == "branch_3":
                 assert ti.state == State.SKIPPED
@@ -1227,9 +1229,7 @@ class TestSqlBranch:
             for ti in tis:
                 if ti.task_id == "make_choice":
                     assert ti.state == State.SUCCESS
-                elif ti.task_id == "branch_1":
-                    assert ti.state == State.NONE
-                elif ti.task_id == "branch_2":
+                elif ti.task_id in ("branch_1", "branch_2"):
                     assert ti.state == State.NONE
                 else:
                     raise ValueError(f"Invalid task id {ti.task_id} found!")
@@ -1274,3 +1274,35 @@ class TestSqlBranch:
                     assert ti.state == State.NONE
                 else:
                     raise ValueError(f"Invalid task id {ti.task_id} found!")
+
+
+class TestBaseSQLOperatorSubClass:
+
+    from airflow.providers.common.sql.operators.sql import BaseSQLOperator
+
+    class NewStyleBaseSQLOperatorSubClass(BaseSQLOperator):
+        """New style subclass of BaseSQLOperator"""
+
+        conn_id_field = "custom_conn_id_field"
+
+        def __init__(self, custom_conn_id_field="test_conn", **kwargs):
+            super().__init__(**kwargs)
+            self.custom_conn_id_field = custom_conn_id_field
+
+    class OldStyleBaseSQLOperatorSubClass(BaseSQLOperator):
+        """Old style subclass of BaseSQLOperator"""
+
+        def __init__(self, custom_conn_id_field="test_conn", **kwargs):
+            super().__init__(conn_id=custom_conn_id_field, **kwargs)
+
+    @pytest.mark.parametrize(
+        "operator_class", [NewStyleBaseSQLOperatorSubClass, OldStyleBaseSQLOperatorSubClass]
+    )
+    @mock.patch("airflow.hooks.base.BaseHook.get_connection")
+    def test_new_style_subclass(self, mock_get_connection, operator_class):
+        from airflow.providers.common.sql.hooks.sql import DbApiHook
+
+        op = operator_class(task_id="test_task")
+        mock_get_connection.return_value.get_hook.return_value = MagicMock(spec=DbApiHook)
+        op.get_db_hook()
+        mock_get_connection.assert_called_once_with("test_conn")

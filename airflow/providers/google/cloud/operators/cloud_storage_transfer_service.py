@@ -18,13 +18,11 @@
 """This module contains Google Cloud Transfer operators."""
 from __future__ import annotations
 
-import warnings
 from copy import deepcopy
 from datetime import date, time
 from typing import TYPE_CHECKING, Sequence
 
-from airflow.exceptions import AirflowException
-from airflow.models import BaseOperator
+from airflow.exceptions import AirflowException, AirflowProviderDeprecationWarning
 from airflow.providers.amazon.aws.hooks.base_aws import AwsBaseHook
 from airflow.providers.google.cloud.hooks.cloud_storage_transfer_service import (
     ACCESS_KEY_ID,
@@ -61,6 +59,7 @@ from airflow.providers.google.cloud.links.cloud_storage_transfer import (
     CloudStorageTransferJobLink,
     CloudStorageTransferListLink,
 )
+from airflow.providers.google.cloud.operators.cloud_base import GoogleCloudBaseOperator
 from airflow.providers.google.cloud.utils.helpers import normalize_directory_path
 
 if TYPE_CHECKING:
@@ -112,8 +111,7 @@ class TransferJobPreprocessor:
 
     def process_body(self) -> dict:
         """
-        Injects AWS credentials into body if needed and
-        reformats schedule information.
+        Injects AWS credentials into body if needed and reformats schedule information.
 
         :return: Preprocessed body
         """
@@ -123,12 +121,12 @@ class TransferJobPreprocessor:
 
     @staticmethod
     def _convert_date_to_dict(field_date: date) -> dict:
-        """Convert native python ``datetime.date`` object  to a format supported by the API"""
+        """Convert native python ``datetime.date`` object  to a format supported by the API."""
         return {DAY: field_date.day, MONTH: field_date.month, YEAR: field_date.year}
 
     @staticmethod
     def _convert_time_to_dict(time_object: time) -> dict:
-        """Convert native python ``datetime.time`` object  to a format supported by the API"""
+        """Convert native python ``datetime.time`` object  to a format supported by the API."""
         return {HOURS: time_object.hour, MINUTES: time_object.minute, SECONDS: time_object.second}
 
 
@@ -163,9 +161,10 @@ class TransferJobValidator:
 
     def validate_body(self) -> None:
         """
-        Validates the body. Checks if body specifies `transferSpec`
-        if yes, then check if AWS credentials are passed correctly and
-        no more than 1 data source was selected.
+        Validates the body.
+
+        Checks if body specifies `transferSpec` if yes, then check if AWS credentials
+        are passed correctly and no more than 1 data source was selected.
 
         :raises: AirflowException
         """
@@ -174,7 +173,7 @@ class TransferJobValidator:
             self._verify_data_source()
 
 
-class CloudDataTransferServiceCreateJobOperator(BaseOperator):
+class CloudDataTransferServiceCreateJobOperator(GoogleCloudBaseOperator):
     """
     Creates a transfer job that runs periodically.
 
@@ -269,7 +268,7 @@ class CloudDataTransferServiceCreateJobOperator(BaseOperator):
         return result
 
 
-class CloudDataTransferServiceUpdateJobOperator(BaseOperator):
+class CloudDataTransferServiceUpdateJobOperator(GoogleCloudBaseOperator):
     """
     Updates a transfer job that runs periodically.
 
@@ -359,12 +358,13 @@ class CloudDataTransferServiceUpdateJobOperator(BaseOperator):
         return hook.update_transfer_job(job_name=self.job_name, body=self.body)
 
 
-class CloudDataTransferServiceDeleteJobOperator(BaseOperator):
+class CloudDataTransferServiceDeleteJobOperator(GoogleCloudBaseOperator):
     """
-    Delete a transfer job. This is a soft delete. After a transfer job is
-    deleted, the job and all the transfer executions are subject to garbage
-    collection. Transfer jobs become eligible for garbage collection
-    30 days after soft delete.
+    Delete a transfer job.
+
+    This is a soft delete. After a transfer job is deleted, the job and all the transfer
+    executions are subject to garbage collection. Transfer jobs become eligible for garbage
+    collection 30 days after soft delete.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -428,10 +428,9 @@ class CloudDataTransferServiceDeleteJobOperator(BaseOperator):
         hook.delete_transfer_job(job_name=self.job_name, project_id=self.project_id)
 
 
-class CloudDataTransferServiceGetOperationOperator(BaseOperator):
+class CloudDataTransferServiceGetOperationOperator(GoogleCloudBaseOperator):
     """
-    Gets the latest state of a long-running operation in Google Storage Transfer
-    Service.
+    Gets the latest state of a long-running operation in Google Storage Transfer Service.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -502,10 +501,9 @@ class CloudDataTransferServiceGetOperationOperator(BaseOperator):
         return operation
 
 
-class CloudDataTransferServiceListOperationsOperator(BaseOperator):
+class CloudDataTransferServiceListOperationsOperator(GoogleCloudBaseOperator):
     """
-    Lists long-running operations in Google Storage Transfer
-    Service that match the specified filter.
+    Lists long-running operations in Google Storage Transfer Service that match the specified filter.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -549,7 +547,9 @@ class CloudDataTransferServiceListOperationsOperator(BaseOperator):
         if request_filter is None:
             if "filter" in kwargs:
                 request_filter = kwargs["filter"]
-                DeprecationWarning("Use 'request_filter' instead 'filter' to pass the argument.")
+                AirflowProviderDeprecationWarning(
+                    "Use 'request_filter' instead 'filter' to pass the argument."
+                )
             else:
                 TypeError("__init__() missing 1 required positional argument: 'request_filter'")
 
@@ -585,7 +585,7 @@ class CloudDataTransferServiceListOperationsOperator(BaseOperator):
         return operations_list
 
 
-class CloudDataTransferServicePauseOperationOperator(BaseOperator):
+class CloudDataTransferServicePauseOperationOperator(GoogleCloudBaseOperator):
     """
     Pauses a transfer operation in Google Storage Transfer Service.
 
@@ -644,7 +644,7 @@ class CloudDataTransferServicePauseOperationOperator(BaseOperator):
         hook.pause_transfer_operation(operation_name=self.operation_name)
 
 
-class CloudDataTransferServiceResumeOperationOperator(BaseOperator):
+class CloudDataTransferServiceResumeOperationOperator(GoogleCloudBaseOperator):
     """
     Resumes a transfer operation in Google Storage Transfer Service.
 
@@ -703,7 +703,7 @@ class CloudDataTransferServiceResumeOperationOperator(BaseOperator):
         hook.resume_transfer_operation(operation_name=self.operation_name)
 
 
-class CloudDataTransferServiceCancelOperationOperator(BaseOperator):
+class CloudDataTransferServiceCancelOperationOperator(GoogleCloudBaseOperator):
     """
     Cancels a transfer operation in Google Storage Transfer Service.
 
@@ -763,10 +763,9 @@ class CloudDataTransferServiceCancelOperationOperator(BaseOperator):
         hook.cancel_transfer_operation(operation_name=self.operation_name)
 
 
-class CloudDataTransferServiceS3ToGCSOperator(BaseOperator):
+class CloudDataTransferServiceS3ToGCSOperator(GoogleCloudBaseOperator):
     """
-    Synchronizes an S3 bucket with a Google Cloud Storage bucket using the
-    Google Cloud Storage Transfer Service.
+    Sync an S3 bucket with a Google Cloud Storage bucket using the Google Cloud Storage Transfer Service.
 
     .. warning::
 
@@ -795,9 +794,6 @@ class CloudDataTransferServiceS3ToGCSOperator(BaseOperator):
     :param aws_conn_id: The source S3 connection
     :param gcp_conn_id: The destination connection ID to use
         when connecting to Google Cloud Storage.
-    :param delegate_to: Google account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param description: Optional transfer service job description
     :param schedule: Optional transfer service schedule;
         If not set, run transfer job once as soon as the operator runs
@@ -849,7 +845,6 @@ class CloudDataTransferServiceS3ToGCSOperator(BaseOperator):
         project_id: str | None = None,
         aws_conn_id: str = "aws_default",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         description: str | None = None,
         schedule: dict | None = None,
         object_conditions: dict | None = None,
@@ -869,11 +864,6 @@ class CloudDataTransferServiceS3ToGCSOperator(BaseOperator):
         self.project_id = project_id
         self.aws_conn_id = aws_conn_id
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.description = description
         self.schedule = schedule
         self.object_conditions = object_conditions
@@ -891,7 +881,6 @@ class CloudDataTransferServiceS3ToGCSOperator(BaseOperator):
     def execute(self, context: Context) -> None:
         hook = CloudDataTransferServiceHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             impersonation_chain=self.google_impersonation_chain,
         )
         body = self._create_body()
@@ -936,7 +925,7 @@ class CloudDataTransferServiceS3ToGCSOperator(BaseOperator):
         return body
 
 
-class CloudDataTransferServiceGCSToGCSOperator(BaseOperator):
+class CloudDataTransferServiceGCSToGCSOperator(GoogleCloudBaseOperator):
     """
     Copies objects from a bucket to another using the Google Cloud Storage Transfer Service.
 
@@ -947,7 +936,7 @@ class CloudDataTransferServiceGCSToGCSOperator(BaseOperator):
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
-        :ref:`howto/operator:GCSToGCSOperator`
+        :ref:`howto/operator:CloudDataTransferServiceGCSToGCSOperator`
 
     **Example**:
 
@@ -971,9 +960,6 @@ class CloudDataTransferServiceGCSToGCSOperator(BaseOperator):
         owns the job
     :param gcp_conn_id: Optional connection ID to use when connecting to Google Cloud
         Storage.
-    :param delegate_to: Google account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param description: Optional transfer service job description
     :param schedule: Optional transfer service schedule;
         If not set, run transfer job once as soon as the operator runs
@@ -1003,6 +989,7 @@ class CloudDataTransferServiceGCSToGCSOperator(BaseOperator):
         If set to True, 'wait' must be set to True.
     """
 
+    # [START gcp_transfer_gcs_to_gcs_template_fields]
     template_fields: Sequence[str] = (
         "gcp_conn_id",
         "source_bucket",
@@ -1013,6 +1000,8 @@ class CloudDataTransferServiceGCSToGCSOperator(BaseOperator):
         "object_conditions",
         "google_impersonation_chain",
     )
+    # [END gcp_transfer_gcs_to_gcs_template_fields]
+
     ui_color = "#e09411"
 
     def __init__(
@@ -1024,7 +1013,6 @@ class CloudDataTransferServiceGCSToGCSOperator(BaseOperator):
         destination_path: str | None = None,
         project_id: str | None = None,
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         description: str | None = None,
         schedule: dict | None = None,
         object_conditions: dict | None = None,
@@ -1043,11 +1031,6 @@ class CloudDataTransferServiceGCSToGCSOperator(BaseOperator):
         self.destination_path = destination_path
         self.project_id = project_id
         self.gcp_conn_id = gcp_conn_id
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
-            )
-        self.delegate_to = delegate_to
         self.description = description
         self.schedule = schedule
         self.object_conditions = object_conditions
@@ -1065,7 +1048,6 @@ class CloudDataTransferServiceGCSToGCSOperator(BaseOperator):
     def execute(self, context: Context) -> None:
         hook = CloudDataTransferServiceHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             impersonation_chain=self.google_impersonation_chain,
         )
 

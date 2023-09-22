@@ -17,9 +17,10 @@
 # under the License.
 from __future__ import annotations
 
+import os
 import sys
+import textwrap
 from pathlib import Path
-from textwrap import wrap
 
 AIRFLOW_SOURCES_DIR = Path(__file__).parents[3].resolve()
 
@@ -27,8 +28,10 @@ sys.path.insert(0, str(Path(__file__).parent.resolve()))  # make sure common_pre
 sys.path.insert(0, str(AIRFLOW_SOURCES_DIR))  # make sure setup is imported from Airflow
 # flake8: noqa: F401
 
-from common_precommit_utils import insert_documentation  # isort: skip # noqa E402
-from setup import EXTRAS_DEPENDENCIES  # isort:skip # noqa
+os.environ["_SKIP_PYTHON_VERSION_CHECK"] = "true"
+
+from common_precommit_utils import insert_documentation  # isort: skip  # noqa: E402
+from setup import EXTRAS_DEPENDENCIES  # isort:skip  # noqa: E402
 
 sys.path.append(str(AIRFLOW_SOURCES_DIR))
 
@@ -42,7 +45,7 @@ CONSTANTS_HEADER = "# START EXTRAS HERE"
 CONSTANTS_FOOTER = "# END EXTRAS HERE"
 
 DEFAULT_EXTRAS = (
-    "amazon,async,celery,cncf.kubernetes,dask,docker,elasticsearch,ftp,google,"
+    "amazon,async,celery,cncf.kubernetes,daskexecutor,docker,elasticsearch,ftp,google,"
     "google_auth,grpc,hashicorp,http,ldap,microsoft.azure,mysql,odbc,pandas,"
     "postgres,redis,sendgrid,sftp,slack,ssh,statsd,virtualenv"
 )
@@ -54,7 +57,7 @@ if __name__ == "__main__":
     global_constants_file_path = (
         AIRFLOW_SOURCES_DIR / "dev" / "breeze" / "src" / "airflow_breeze" / "global_constants.py"
     )
-    extras_list = wrap(", ".join(EXTRAS_DEPENDENCIES.keys()), 100)
+    extras_list = textwrap.wrap(", ".join(EXTRAS_DEPENDENCIES.keys()), 100)
     extras_list = [line + "\n" for line in extras_list]
     extras_code = [f"    {extra}\n" for extra in EXTRAS_DEPENDENCIES.keys()]
     insert_documentation(install_file_path, extras_list, INSTALL_HEADER, INSTALL_FOOTER)

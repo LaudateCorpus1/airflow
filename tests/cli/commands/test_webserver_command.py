@@ -19,19 +19,21 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from unittest import mock
 
 import psutil
 import pytest
+from rich.console import Console
 
 from airflow import settings
 from airflow.cli import cli_parser
 from airflow.cli.commands import webserver_command
 from airflow.cli.commands.webserver_command import GunicornMonitor
-from airflow.utils.cli import setup_locations
+from tests.cli.commands._common_cli_classes import _ComonCLIGunicornTestClass
 from tests.test_utils.config import conf_vars
+
+console = Console(width=400, color_system="standard")
 
 
 class TestGunicornMonitor:
@@ -127,20 +129,15 @@ class TestGunicornMonitor:
 
 
 class TestGunicornMonitorGeneratePluginState:
-    @staticmethod
-    def _prepare_test_file(filepath: str, size: int):
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, "w") as file:
-            file.write("A" * size)
-            file.flush()
-
-    def test_should_detect_changes_in_directory(self):
-        with tempfile.TemporaryDirectory() as tempdir, mock.patch(
-            "airflow.cli.commands.webserver_command.settings.PLUGINS_FOLDER", tempdir
+    def test_should_detect_changes_in_directory(self, tmp_path):
+        with mock.patch(
+            "airflow.cli.commands.webserver_command.settings.PLUGINS_FOLDER", os.fspath(tmp_path)
         ):
-            self._prepare_test_file(f"{tempdir}/file1.txt", 100)
-            self._prepare_test_file(f"{tempdir}/nested/nested/nested/nested/file2.txt", 200)
-            self._prepare_test_file(f"{tempdir}/file3.txt", 300)
+            (tmp_path / "file1.txt").write_text("A" * 100)
+            path2 = tmp_path / "nested/nested/nested/nested/file2.txt"
+            path2.parent.mkdir(parents=True)
+            path2.write_text("A" * 200)
+            (tmp_path / "file3.txt").write_text("A" * 300)
 
             monitor = GunicornMonitor(
                 gunicorn_master_pid=1,
@@ -159,7 +156,7 @@ class TestGunicornMonitorGeneratePluginState:
             assert 3 == len(state_a)
 
             # Should detect new file
-            self._prepare_test_file(f"{tempdir}/file4.txt", 400)
+            (tmp_path / "file4.txt").write_text("A" * 400)
 
             state_c = monitor._generate_plugin_state()
 
@@ -167,7 +164,7 @@ class TestGunicornMonitorGeneratePluginState:
             assert 4 == len(state_c)
 
             # Should detect changes in files
-            self._prepare_test_file(f"{tempdir}/file4.txt", 450)
+            (tmp_path / "file4.txt").write_text("A" * 450)
 
             state_d = monitor._generate_plugin_state()
 
@@ -175,7 +172,7 @@ class TestGunicornMonitorGeneratePluginState:
             assert 4 == len(state_d)
 
             # Should support large files
-            self._prepare_test_file(f"{tempdir}/file4.txt", 4000000)
+            (tmp_path / "file4.txt").write_text("A" * 4_000_000)
 
             state_d = monitor._generate_plugin_state()
 
@@ -229,71 +226,23 @@ class TestCLIGetNumReadyWorkersRunning:
             assert self.monitor._get_num_ready_workers_running() == 0
 
 
-class TestCliWebServer:
-    @pytest.fixture(autouse=True)
-    def _make_parser(self):
-        self.parser = cli_parser.get_parser()
+class TestCliWebServer(_ComonCLIGunicornTestClass):
 
-    @pytest.fixture(autouse=True)
-    def _cleanup(self):
-        self._check_processes()
-        self._clean_pidfiles()
-
-        yield
-
-        self._check_processes(ignore_running=True)
-        self._clean_pidfiles()
-
-    def _check_processes(self, ignore_running=False):
-        # Confirm that webserver hasn't been launched.
-        # pgrep returns exit status 1 if no process matched.
-        # Use more specific regexps (^) to avoid matching pytest run when running specific method.
-        # For instance, we want to be able to do: pytest -k 'gunicorn'
-        exit_code_pgrep_webserver = subprocess.Popen(["pgrep", "-c", "-f", "airflow webserver"]).wait()
-        exit_code_pgrep_gunicorn = subprocess.Popen(["pgrep", "-c", "-f", "^gunicorn"]).wait()
-        if exit_code_pgrep_webserver != 1 or exit_code_pgrep_gunicorn != 1:
-            subprocess.Popen(["ps", "-ax"]).wait()
-            if exit_code_pgrep_webserver != 1:
-                subprocess.Popen(["pkill", "-9", "-f", "airflow webserver"]).wait()
-            if exit_code_pgrep_gunicorn != 1:
-                subprocess.Popen(["pkill", "-9", "-f", "^gunicorn"]).wait()
-            if not ignore_running:
-                raise AssertionError(
-                    "Background processes are running that prevent the test from passing successfully."
-                )
-
-    def _clean_pidfiles(self):
-        pidfile_webserver = setup_locations("webserver")[0]
-        pidfile_monitor = setup_locations("webserver-monitor")[0]
-        if os.path.exists(pidfile_webserver):
-            os.remove(pidfile_webserver)
-        if os.path.exists(pidfile_monitor):
-            os.remove(pidfile_monitor)
-
-    def _wait_pidfile(self, pidfile):
-        start_time = time.monotonic()
-        while True:
-            try:
-                with open(pidfile) as file:
-                    return int(file.read())
-            except Exception:
-                if start_time - time.monotonic() > 60:
-                    raise
-                time.sleep(1)
+    main_process_regexp = r"airflow webserver"
 
     @pytest.mark.execution_timeout(210)
-    def test_cli_webserver_background(self):
-        with tempfile.TemporaryDirectory(prefix="gunicorn") as tmpdir, mock.patch.dict(
+    def test_cli_webserver_background(self, tmp_path):
+        with mock.patch.dict(
             "os.environ",
             AIRFLOW__CORE__DAGS_FOLDER="/dev/null",
             AIRFLOW__CORE__LOAD_EXAMPLES="False",
             AIRFLOW__WEBSERVER__WORKERS="1",
         ):
-            pidfile_webserver = f"{tmpdir}/pidflow-webserver.pid"
-            pidfile_monitor = f"{tmpdir}/pidflow-webserver-monitor.pid"
-            stdout = f"{tmpdir}/airflow-webserver.out"
-            stderr = f"{tmpdir}/airflow-webserver.err"
-            logfile = f"{tmpdir}/airflow-webserver.log"
+            pidfile_webserver = tmp_path / "pidflow-webserver.pid"
+            pidfile_monitor = tmp_path / "pidflow-webserver-monitor.pid"
+            stdout = tmp_path / "airflow-webserver.out"
+            stderr = tmp_path / "airflow-webserver.err"
+            logfile = tmp_path / "airflow-webserver.log"
             try:
                 # Run webserver as daemon in background. Note that the wait method is not called.
 
@@ -303,40 +252,49 @@ class TestCliWebServer:
                         "webserver",
                         "--daemon",
                         "--pid",
-                        pidfile_webserver,
+                        os.fspath(pidfile_webserver),
                         "--stdout",
-                        stdout,
+                        os.fspath(stdout),
                         "--stderr",
-                        stderr,
+                        os.fspath(stderr),
                         "--log-file",
-                        logfile,
+                        os.fspath(logfile),
                     ]
                 )
                 assert proc.poll() is None
 
                 pid_monitor = self._wait_pidfile(pidfile_monitor)
-                self._wait_pidfile(pidfile_webserver)
-
-                # Assert that gunicorn and its monitor are launched.
-                assert 0 == subprocess.Popen(["pgrep", "-f", "-c", "airflow webserver --daemon"]).wait()
+                console.print(f"[blue]Monitor started at {pid_monitor}")
+                pid_webserver = self._wait_pidfile(pidfile_webserver)
+                console.print(f"[blue]Webserver started at {pid_webserver}")
+                console.print("[blue]Running airflow webserver process:")
+                # Assert that the webserver and gunicorn processes are running (by name rather than pid).
+                assert self._find_process(r"airflow webserver", print_found_process=True)
+                console.print("[blue]Waiting for gunicorn processes:")
                 # wait for gunicorn to start
                 for i in range(30):
-                    if 0 == subprocess.Popen(["pgrep", "-f", "-c", "^gunicorn"]).wait():
+                    if self._find_process(r"^gunicorn"):
                         break
+                    console.print("[blue]Waiting for gunicorn to start ...")
                     time.sleep(1)
-                assert 0 == subprocess.Popen(["pgrep", "-c", "-f", "gunicorn: master"]).wait()
-
-                # Terminate monitor process.
+                console.print("[blue]Running gunicorn processes:")
+                assert self._find_all_processes("^gunicorn", print_found_process=True)
+                console.print("[magenta]Webserver process started successfully.")
+                console.print(
+                    "[magenta]Terminating monitor process and expect "
+                    "Webserver and gunicorn processes to terminate as well"
+                )
                 proc = psutil.Process(pid_monitor)
                 proc.terminate()
                 assert proc.wait(120) in (0, None)
-
-                self._check_processes()
+                self._check_processes(ignore_running=False)
+                console.print("[magenta]All Webserver and gunicorn processes are terminated.")
             except Exception:
-                # List all logs
-                subprocess.Popen(["ls", "-lah", tmpdir]).wait()
+                console.print("[red]Exception occurred. Dumping all logs.")
                 # Dump all logs
-                subprocess.Popen(["bash", "-c", f"ls {tmpdir}/* | xargs -n 1 -t cat"]).wait()
+                for file in tmp_path.glob("*"):
+                    console.print(f"Dumping {file} (size: {file.stat().st_size})")
+                    console.print(file.read_text())
                 raise
 
     # Patch for causing webserver timeout

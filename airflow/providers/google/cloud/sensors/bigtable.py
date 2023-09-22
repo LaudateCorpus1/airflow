@@ -21,8 +21,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Sequence
 
 import google.api_core.exceptions
+from google.cloud.bigtable import enums
 from google.cloud.bigtable.table import ClusterState
-from google.cloud.bigtable_admin_v2 import enums
 
 from airflow.providers.google.cloud.hooks.bigtable import BigtableHook
 from airflow.providers.google.cloud.links.bigtable import BigtableTablesLink
@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 class BigtableTableReplicationCompletedSensor(BaseSensorOperator, BigtableValidationMixin):
     """
     Sensor that waits for Cloud Bigtable table to be fully replicated to its clusters.
+
     No exception will be raised if the instance or the table does not exist.
 
     For more details about cluster states for a table, have a look at the reference:
@@ -103,7 +104,7 @@ class BigtableTableReplicationCompletedSensor(BaseSensorOperator, BigtableValida
             )
             return False
 
-        ready_state = ClusterState(enums.Table.ClusterState.ReplicationState.READY)
+        ready_state = ClusterState(enums.Table.ReplicationState.READY)
 
         is_table_replicated = True
         for cluster_id in cluster_states.keys():

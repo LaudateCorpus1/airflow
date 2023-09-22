@@ -17,6 +17,10 @@
 # under the License.
 from __future__ import annotations
 
+from unittest.mock import patch
+
+import pytest
+
 from airflow.models import Connection
 from airflow.providers.apache.spark.hooks.spark_jdbc import SparkJDBCHook
 from airflow.utils import db
@@ -80,6 +84,42 @@ class TestSparkJDBCHook:
                 login="user",
                 password="supersecret",
                 extra='{"conn_prefix":"jdbc:postgresql://"}',
+            )
+        )
+        db.merge_conn(
+            Connection(
+                conn_id="jdbc-invalid-host",
+                conn_type="postgres",
+                host="localhost/test",
+                schema="default",
+                port=5432,
+                login="user",
+                password="supersecret",
+                extra='{"conn_prefix":"jdbc:postgresql://"}',
+            )
+        )
+        db.merge_conn(
+            Connection(
+                conn_id="jdbc-invalid-schema",
+                conn_type="postgres",
+                host="localhost",
+                schema="default?test=",
+                port=5432,
+                login="user",
+                password="supersecret",
+                extra='{"conn_prefix":"jdbc:postgresql://"}',
+            )
+        )
+        db.merge_conn(
+            Connection(
+                conn_id="jdbc-invalid-extra-conn-prefix",
+                conn_type="postgres",
+                host="localhost",
+                schema="default",
+                port=5432,
+                login="user",
+                password="supersecret",
+                extra='{"conn_prefix":"jdbc:mysql://some_host:8085/test?some_query_param=true#"}',
             )
         )
 
@@ -150,3 +190,17 @@ class TestSparkJDBCHook:
 
         # Expect Exception
         hook._build_jdbc_application_arguments(hook._resolve_jdbc_connection())
+
+    def test_invalid_host(self):
+        with pytest.raises(ValueError, match="host should not contain a"):
+            SparkJDBCHook(jdbc_conn_id="jdbc-invalid-host", **self._config)
+
+    def test_invalid_schema(self):
+        with pytest.raises(ValueError, match="schema should not contain a"):
+            SparkJDBCHook(jdbc_conn_id="jdbc-invalid-schema", **self._config)
+
+    @patch("airflow.providers.apache.spark.hooks.spark_submit.SparkSubmitHook.submit")
+    def test_invalid_extra_conn_prefix(self, mock_submit):
+        hook = SparkJDBCHook(jdbc_conn_id="jdbc-invalid-extra-conn-prefix", **self._config)
+        with pytest.raises(ValueError, match="extra conn_prefix should not contain a"):
+            hook.submit_jdbc_job()

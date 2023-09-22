@@ -19,12 +19,21 @@ from __future__ import annotations
 
 from enum import Enum
 
-from airflow.settings import STATE_COLORS
+
+class JobState(str, Enum):
+    """All possible states that a Job can be in."""
+
+    RUNNING = "running"
+    SUCCESS = "success"
+    RESTARTING = "restarting"
+    FAILED = "failed"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class TaskInstanceState(str, Enum):
-    """
-    Enum that represents all possible states that a Task Instance can be in.
+    """All possible states that a Task Instance can be in.
 
     Note that None is also allowed, so always use this in a type hint with Optional.
     """
@@ -41,7 +50,6 @@ class TaskInstanceState(str, Enum):
     QUEUED = "queued"  # Executor has enqueued the task
     RUNNING = "running"  # Task is executing
     SUCCESS = "success"  # Task completed
-    SHUTDOWN = "shutdown"  # External request to shut down (e.g. marked failed when running)
     RESTARTING = "restarting"  # External request to restart (e.g. cleared when running)
     FAILED = "failed"  # Task errored out
     UP_FOR_RETRY = "up_for_retry"  # Task failed but has retries left
@@ -50,13 +58,20 @@ class TaskInstanceState(str, Enum):
     SKIPPED = "skipped"  # Skipped by branching or some other mechanism
     DEFERRED = "deferred"  # Deferrable operator waiting on a trigger
 
+    # Not used anymore, kept for compatibility.
+    # TODO: Remove in Airflow 3.0.
+    SHUTDOWN = "shutdown"
+    """The task instance is being shut down.
+
+    :meta private:
+    """
+
     def __str__(self) -> str:
         return self.value
 
 
 class DagRunState(str, Enum):
-    """
-    Enum that represents all possible states that a DagRun can be in.
+    """All possible states that a DagRun can be in.
 
     These are "shared" with TaskInstanceState in some parts of the code,
     so please ensure that their values always match the ones with the
@@ -73,10 +88,7 @@ class DagRunState(str, Enum):
 
 
 class State:
-    """
-    Static class with task instance state constants and color methods to
-    avoid hardcoding.
-    """
+    """Static class with task instance state constants and color methods to avoid hard-coding."""
 
     # Backwards-compat constants for code that does not yet use the enum
     # These first three are shared by DagState and TaskState
@@ -89,7 +101,6 @@ class State:
     REMOVED = TaskInstanceState.REMOVED
     SCHEDULED = TaskInstanceState.SCHEDULED
     QUEUED = TaskInstanceState.QUEUED
-    SHUTDOWN = TaskInstanceState.SHUTDOWN
     RESTARTING = TaskInstanceState.RESTARTING
     UP_FOR_RETRY = TaskInstanceState.UP_FOR_RETRY
     UP_FOR_RESCHEDULE = TaskInstanceState.UP_FOR_RESCHEDULE
@@ -97,7 +108,18 @@ class State:
     SKIPPED = TaskInstanceState.SKIPPED
     DEFERRED = TaskInstanceState.DEFERRED
 
-    task_states: tuple[TaskInstanceState | None, ...] = (None,) + tuple(TaskInstanceState)
+    # Not used anymore, kept for compatibility.
+    # TODO: Remove in Airflow 3.0.
+    SHUTDOWN = TaskInstanceState.SHUTDOWN
+    """The task instance is being shut down.
+
+    :meta private:
+    """
+
+    finished_dr_states: frozenset[DagRunState] = frozenset([DagRunState.SUCCESS, DagRunState.FAILED])
+    unfinished_dr_states: frozenset[DagRunState] = frozenset([DagRunState.QUEUED, DagRunState.RUNNING])
+
+    task_states: tuple[TaskInstanceState | None, ...] = (None, *TaskInstanceState)
 
     dag_states: tuple[DagRunState, ...] = (
         DagRunState.QUEUED,
@@ -111,7 +133,6 @@ class State:
         TaskInstanceState.QUEUED: "gray",
         TaskInstanceState.RUNNING: "lime",
         TaskInstanceState.SUCCESS: "green",
-        TaskInstanceState.SHUTDOWN: "blue",
         TaskInstanceState.RESTARTING: "violet",
         TaskInstanceState.FAILED: "red",
         TaskInstanceState.UP_FOR_RETRY: "gold",
@@ -122,11 +143,10 @@ class State:
         TaskInstanceState.SCHEDULED: "tan",
         TaskInstanceState.DEFERRED: "mediumpurple",
     }
-    state_color.update(STATE_COLORS)  # type: ignore
 
     @classmethod
     def color(cls, state):
-        """Returns color for a state."""
+        """Return color for a state."""
         return cls.state_color.get(state, "white")
 
     @classmethod
@@ -161,7 +181,6 @@ class State:
             TaskInstanceState.SCHEDULED,
             TaskInstanceState.QUEUED,
             TaskInstanceState.RUNNING,
-            TaskInstanceState.SHUTDOWN,
             TaskInstanceState.RESTARTING,
             TaskInstanceState.UP_FOR_RETRY,
             TaskInstanceState.UP_FOR_RESCHEDULE,
@@ -187,7 +206,19 @@ class State:
     A list of states indicating that a task or dag is a success state.
     """
 
+    # Kept for compatibility. DO NOT USE.
+    # TODO: Remove in Airflow 3.0.
     terminating_states = frozenset([TaskInstanceState.SHUTDOWN, TaskInstanceState.RESTARTING])
     """
     A list of states indicating that a task has been terminated.
+
+    :meta private:
+    """
+
+    adoptable_states = frozenset(
+        [TaskInstanceState.QUEUED, TaskInstanceState.RUNNING, TaskInstanceState.RESTARTING]
+    )
+    """
+    A list of states indicating that a task can be adopted or reset by a scheduler job
+    if it was queued by another scheduler job that is not running anymore.
     """

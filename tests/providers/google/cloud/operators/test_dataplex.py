@@ -16,22 +16,37 @@
 # under the License.
 from __future__ import annotations
 
-from unittest import TestCase, mock
+from unittest import mock
 
+import pytest
 from google.api_core.gapic_v1.method import DEFAULT
 
+from airflow.exceptions import TaskDeferred
 from airflow.providers.google.cloud.operators.dataplex import (
+    DataplexCreateAssetOperator,
     DataplexCreateLakeOperator,
+    DataplexCreateOrUpdateDataQualityScanOperator,
     DataplexCreateTaskOperator,
+    DataplexCreateZoneOperator,
+    DataplexDeleteAssetOperator,
+    DataplexDeleteDataQualityScanOperator,
     DataplexDeleteLakeOperator,
     DataplexDeleteTaskOperator,
+    DataplexDeleteZoneOperator,
+    DataplexGetDataQualityScanResultOperator,
     DataplexGetTaskOperator,
     DataplexListTasksOperator,
+    DataplexRunDataQualityScanOperator,
 )
+from airflow.providers.google.cloud.triggers.dataplex import DataplexDataQualityJobTrigger
+from airflow.providers.google.common.consts import GOOGLE_DEFAULT_DEFERRABLE_METHOD_NAME
 
 HOOK_STR = "airflow.providers.google.cloud.operators.dataplex.DataplexHook"
 TASK_STR = "airflow.providers.google.cloud.operators.dataplex.Task"
 LAKE_STR = "airflow.providers.google.cloud.operators.dataplex.Lake"
+DATASCANJOB_STR = "airflow.providers.google.cloud.operators.dataplex.DataScanJob"
+ZONE_STR = "airflow.providers.google.cloud.operators.dataplex.Zone"
+ASSET_STR = "airflow.providers.google.cloud.operators.dataplex.Asset"
 
 PROJECT_ID = "project-id"
 REGION = "region"
@@ -46,12 +61,16 @@ BODY_LAKE = {
 DATAPLEX_TASK_ID = "testTask001"
 
 GCP_CONN_ID = "google_cloud_default"
-DELEGATE_TO = "test-delegate-to"
 API_VERSION = "v1"
 IMPERSONATION_CHAIN = ["ACCOUNT_1", "ACCOUNT_2", "ACCOUNT_3"]
+DATA_SCAN_ID = "test-data-scan-id"
+TASK_ID = "test_task_id"
+ASSET_ID = "test_asset_id"
+ZONE_ID = "test_zone_id"
+JOB_ID = "test_job_id"
 
 
-class TestDataplexCreateTaskOperator(TestCase):
+class TestDataplexCreateTaskOperator:
     @mock.patch(HOOK_STR)
     @mock.patch(TASK_STR)
     def test_execute(self, task_mock, hook_mock):
@@ -65,7 +84,6 @@ class TestDataplexCreateTaskOperator(TestCase):
             validate_only=None,
             api_version=API_VERSION,
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
         hook_mock.return_value.wait_for_operation.return_value = None
@@ -73,7 +91,6 @@ class TestDataplexCreateTaskOperator(TestCase):
         op.execute(context=mock.MagicMock())
         hook_mock.assert_called_once_with(
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             api_version=API_VERSION,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
@@ -90,7 +107,7 @@ class TestDataplexCreateTaskOperator(TestCase):
         )
 
 
-class TestDataplexDeleteTaskOperator(TestCase):
+class TestDataplexDeleteTaskOperator:
     @mock.patch(HOOK_STR)
     def test_execute(self, hook_mock):
         op = DataplexDeleteTaskOperator(
@@ -101,13 +118,11 @@ class TestDataplexDeleteTaskOperator(TestCase):
             task_id="delete_dataplex_task",
             api_version=API_VERSION,
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
         op.execute(context=None)
         hook_mock.assert_called_once_with(
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             api_version=API_VERSION,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
@@ -122,7 +137,7 @@ class TestDataplexDeleteTaskOperator(TestCase):
         )
 
 
-class TestDataplexListTasksOperator(TestCase):
+class TestDataplexListTasksOperator:
     @mock.patch(HOOK_STR)
     def test_execute(self, hook_mock):
         op = DataplexListTasksOperator(
@@ -132,13 +147,11 @@ class TestDataplexListTasksOperator(TestCase):
             task_id="list_dataplex_task",
             api_version=API_VERSION,
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
         op.execute(context=mock.MagicMock())
         hook_mock.assert_called_once_with(
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             api_version=API_VERSION,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
@@ -156,7 +169,7 @@ class TestDataplexListTasksOperator(TestCase):
         )
 
 
-class TestDataplexGetTaskOperator(TestCase):
+class TestDataplexGetTaskOperator:
     @mock.patch(HOOK_STR)
     @mock.patch(TASK_STR)
     def test_execute(self, task_mock, hook_mock):
@@ -168,7 +181,6 @@ class TestDataplexGetTaskOperator(TestCase):
             task_id="get_dataplex_task",
             api_version=API_VERSION,
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
         hook_mock.return_value.wait_for_operation.return_value = None
@@ -176,7 +188,6 @@ class TestDataplexGetTaskOperator(TestCase):
         op.execute(context=mock.MagicMock())
         hook_mock.assert_called_once_with(
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             api_version=API_VERSION,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
@@ -191,7 +202,7 @@ class TestDataplexGetTaskOperator(TestCase):
         )
 
 
-class TestDataplexDeleteLakeOperator(TestCase):
+class TestDataplexDeleteLakeOperator:
     @mock.patch(HOOK_STR)
     def test_execute(self, hook_mock):
         op = DataplexDeleteLakeOperator(
@@ -201,13 +212,11 @@ class TestDataplexDeleteLakeOperator(TestCase):
             task_id="delete_dataplex_lake",
             api_version=API_VERSION,
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
         op.execute(context=mock.MagicMock())
         hook_mock.assert_called_once_with(
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             api_version=API_VERSION,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
@@ -221,7 +230,7 @@ class TestDataplexDeleteLakeOperator(TestCase):
         )
 
 
-class TestDataplexCreateLakeOperator(TestCase):
+class TestDataplexCreateLakeOperator:
     @mock.patch(HOOK_STR)
     @mock.patch(LAKE_STR)
     def test_execute(self, lake_mock, hook_mock):
@@ -234,7 +243,6 @@ class TestDataplexCreateLakeOperator(TestCase):
             validate_only=None,
             api_version=API_VERSION,
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
         hook_mock.return_value.wait_for_operation.return_value = None
@@ -242,7 +250,6 @@ class TestDataplexCreateLakeOperator(TestCase):
         op.execute(context=mock.MagicMock())
         hook_mock.assert_called_once_with(
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             api_version=API_VERSION,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
@@ -252,6 +259,329 @@ class TestDataplexCreateLakeOperator(TestCase):
             lake_id=LAKE_ID,
             body=BODY_LAKE,
             validate_only=None,
+            retry=DEFAULT,
+            timeout=None,
+            metadata=(),
+        )
+
+
+class TestDataplexRunDataQualityScanOperator:
+    @mock.patch(HOOK_STR)
+    @mock.patch(DATASCANJOB_STR)
+    def test_execute(self, mock_data_scan_job, hook_mock):
+        op = DataplexRunDataQualityScanOperator(
+            task_id="execute_data_scan",
+            project_id=PROJECT_ID,
+            region=REGION,
+            data_scan_id=DATA_SCAN_ID,
+            api_version=API_VERSION,
+            gcp_conn_id=GCP_CONN_ID,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        op.execute(context=mock.MagicMock())
+        hook_mock.assert_called_once_with(
+            gcp_conn_id=GCP_CONN_ID,
+            api_version=API_VERSION,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        hook_mock.return_value.run_data_scan.assert_called_once_with(
+            project_id=PROJECT_ID,
+            region=REGION,
+            data_scan_id=DATA_SCAN_ID,
+            retry=DEFAULT,
+            timeout=None,
+            metadata=(),
+        )
+
+    @mock.patch(HOOK_STR)
+    @mock.patch(DATASCANJOB_STR)
+    def test_execute_deferrable(self, mock_data_scan_job, hook_mock):
+        op = DataplexRunDataQualityScanOperator(
+            task_id="execute_data_scan",
+            project_id=PROJECT_ID,
+            region=REGION,
+            data_scan_id=DATA_SCAN_ID,
+            api_version=API_VERSION,
+            gcp_conn_id=GCP_CONN_ID,
+            impersonation_chain=IMPERSONATION_CHAIN,
+            deferrable=True,
+        )
+
+        with pytest.raises(TaskDeferred) as exc:
+            op.execute(mock.MagicMock())
+
+        hook_mock.assert_called_once_with(
+            gcp_conn_id=GCP_CONN_ID,
+            api_version=API_VERSION,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        hook_mock.return_value.run_data_scan.assert_called_once_with(
+            project_id=PROJECT_ID,
+            region=REGION,
+            data_scan_id=DATA_SCAN_ID,
+            retry=DEFAULT,
+            timeout=None,
+            metadata=(),
+        )
+        hook_mock.return_value.wait_for_data_scan_job.assert_not_called()
+
+        assert isinstance(exc.value.trigger, DataplexDataQualityJobTrigger)
+        assert exc.value.method_name == GOOGLE_DEFAULT_DEFERRABLE_METHOD_NAME
+
+
+class TestDataplexGetDataQualityScanResultOperator:
+    @mock.patch(HOOK_STR)
+    @mock.patch(DATASCANJOB_STR)
+    def test_execute(self, mock_data_scan_job, hook_mock):
+        op = DataplexGetDataQualityScanResultOperator(
+            task_id="get_data_scan_result",
+            project_id=PROJECT_ID,
+            region=REGION,
+            job_id=JOB_ID,
+            data_scan_id=DATA_SCAN_ID,
+            api_version=API_VERSION,
+            wait_for_results=False,
+            gcp_conn_id=GCP_CONN_ID,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+
+        op.execute(context=mock.MagicMock())
+        hook_mock.assert_called_once_with(
+            gcp_conn_id=GCP_CONN_ID,
+            api_version=API_VERSION,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        hook_mock.return_value.get_data_scan_job.assert_called_once_with(
+            project_id=PROJECT_ID,
+            region=REGION,
+            job_id=JOB_ID,
+            data_scan_id=DATA_SCAN_ID,
+            retry=DEFAULT,
+            timeout=None,
+            metadata=(),
+        )
+
+    @mock.patch(HOOK_STR)
+    @mock.patch(DATASCANJOB_STR)
+    def test_execute_deferrable(self, mock_data_scan_job, hook_mock):
+        op = DataplexGetDataQualityScanResultOperator(
+            task_id="get_data_scan_result",
+            project_id=PROJECT_ID,
+            region=REGION,
+            job_id=JOB_ID,
+            data_scan_id=DATA_SCAN_ID,
+            api_version=API_VERSION,
+            wait_for_results=True,
+            gcp_conn_id=GCP_CONN_ID,
+            impersonation_chain=IMPERSONATION_CHAIN,
+            deferrable=True,
+        )
+
+        with pytest.raises(TaskDeferred) as exc:
+            op.execute(mock.MagicMock())
+
+        hook_mock.assert_called_once_with(
+            gcp_conn_id=GCP_CONN_ID,
+            api_version=API_VERSION,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+
+        hook_mock.return_value.wait_for_data_scan_job.assert_not_called()
+
+        assert isinstance(exc.value.trigger, DataplexDataQualityJobTrigger)
+        assert exc.value.method_name == GOOGLE_DEFAULT_DEFERRABLE_METHOD_NAME
+
+
+class TestDataplexCreateAssetOperator:
+    @mock.patch(HOOK_STR)
+    @mock.patch(ASSET_STR)
+    def test_execute(self, asset_mock, hook_mock):
+        op = DataplexCreateAssetOperator(
+            task_id=TASK_ID,
+            project_id=PROJECT_ID,
+            region=REGION,
+            lake_id=LAKE_ID,
+            zone_id=ZONE_ID,
+            asset_id=ASSET_ID,
+            body={},
+            api_version=API_VERSION,
+            gcp_conn_id=GCP_CONN_ID,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        hook_mock.return_value.wait_for_operation.return_value = None
+        asset_mock.return_value.to_dict.return_value = None
+        op.execute(context=mock.MagicMock())
+        hook_mock.assert_called_once_with(
+            gcp_conn_id=GCP_CONN_ID,
+            api_version=API_VERSION,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        hook_mock.return_value.create_asset.assert_called_once_with(
+            project_id=PROJECT_ID,
+            region=REGION,
+            lake_id=LAKE_ID,
+            zone_id=ZONE_ID,
+            asset_id=ASSET_ID,
+            body={},
+            retry=DEFAULT,
+            timeout=None,
+            metadata=(),
+        )
+
+
+class TestDataplexCreateZoneOperator:
+    @mock.patch(HOOK_STR)
+    @mock.patch(ZONE_STR)
+    def test_execute(self, zone_mock, hook_mock):
+        op = DataplexCreateZoneOperator(
+            task_id=TASK_ID,
+            project_id=PROJECT_ID,
+            region=REGION,
+            lake_id=LAKE_ID,
+            zone_id=ZONE_ID,
+            body={},
+            api_version=API_VERSION,
+            gcp_conn_id=GCP_CONN_ID,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        hook_mock.return_value.wait_for_operation.return_value = None
+        zone_mock.return_value.to_dict.return_value = None
+        op.execute(context=mock.MagicMock())
+        hook_mock.assert_called_once_with(
+            gcp_conn_id=GCP_CONN_ID,
+            api_version=API_VERSION,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        hook_mock.return_value.create_zone.assert_called_once_with(
+            project_id=PROJECT_ID,
+            region=REGION,
+            lake_id=LAKE_ID,
+            zone_id=ZONE_ID,
+            body={},
+            retry=DEFAULT,
+            timeout=None,
+            metadata=(),
+        )
+
+
+class TestDataplexDeleteZoneOperator:
+    @mock.patch(HOOK_STR)
+    def test_execute(self, hook_mock):
+        op = DataplexDeleteZoneOperator(
+            task_id=TASK_ID,
+            project_id=PROJECT_ID,
+            region=REGION,
+            lake_id=LAKE_ID,
+            zone_id=ZONE_ID,
+            api_version=API_VERSION,
+            gcp_conn_id=GCP_CONN_ID,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+
+        op.execute(context=mock.MagicMock())
+        hook_mock.assert_called_once_with(
+            gcp_conn_id=GCP_CONN_ID,
+            api_version=API_VERSION,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        hook_mock.return_value.delete_zone.assert_called_once_with(
+            project_id=PROJECT_ID,
+            region=REGION,
+            lake_id=LAKE_ID,
+            zone_id=ZONE_ID,
+            retry=DEFAULT,
+            timeout=None,
+            metadata=(),
+        )
+
+
+class TestDataplexDeleteAssetOperator:
+    @mock.patch(HOOK_STR)
+    def test_execute(self, hook_mock):
+        op = DataplexDeleteAssetOperator(
+            task_id=TASK_ID,
+            project_id=PROJECT_ID,
+            region=REGION,
+            lake_id=LAKE_ID,
+            zone_id=ZONE_ID,
+            asset_id=ASSET_ID,
+            api_version=API_VERSION,
+            gcp_conn_id=GCP_CONN_ID,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+
+        op.execute(context=mock.MagicMock())
+        hook_mock.assert_called_once_with(
+            gcp_conn_id=GCP_CONN_ID,
+            api_version=API_VERSION,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        hook_mock.return_value.delete_asset.assert_called_once_with(
+            project_id=PROJECT_ID,
+            region=REGION,
+            lake_id=LAKE_ID,
+            zone_id=ZONE_ID,
+            asset_id=ASSET_ID,
+            retry=DEFAULT,
+            timeout=None,
+            metadata=(),
+        )
+
+
+class TestDataplexDeleteDataQualityScanOperator:
+    @mock.patch(HOOK_STR)
+    def test_execute(self, hook_mock):
+        op = DataplexDeleteDataQualityScanOperator(
+            task_id=TASK_ID,
+            project_id=PROJECT_ID,
+            region=REGION,
+            data_scan_id=DATA_SCAN_ID,
+            api_version=API_VERSION,
+            gcp_conn_id=GCP_CONN_ID,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+
+        op.execute(context=mock.MagicMock())
+        hook_mock.assert_called_once_with(
+            gcp_conn_id=GCP_CONN_ID,
+            api_version=API_VERSION,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        hook_mock.return_value.delete_data_scan.assert_called_once_with(
+            project_id=PROJECT_ID,
+            region=REGION,
+            data_scan_id=DATA_SCAN_ID,
+            retry=DEFAULT,
+            timeout=None,
+            metadata=(),
+        )
+
+
+class TestDataplexCreateDataQualityScanOperator:
+    @mock.patch(HOOK_STR)
+    def test_execute(self, hook_mock):
+        op = DataplexCreateOrUpdateDataQualityScanOperator(
+            task_id=TASK_ID,
+            project_id=PROJECT_ID,
+            region=REGION,
+            data_scan_id=DATA_SCAN_ID,
+            body={},
+            api_version=API_VERSION,
+            gcp_conn_id=GCP_CONN_ID,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+
+        op.execute(context=mock.MagicMock())
+        hook_mock.assert_called_once_with(
+            gcp_conn_id=GCP_CONN_ID,
+            api_version=API_VERSION,
+            impersonation_chain=IMPERSONATION_CHAIN,
+        )
+        hook_mock.return_value.create_data_scan.assert_called_once_with(
+            project_id=PROJECT_ID,
+            region=REGION,
+            data_scan_id=DATA_SCAN_ID,
+            body={},
             retry=DEFAULT,
             timeout=None,
             metadata=(),

@@ -21,18 +21,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Sequence
 
 from airflow.exceptions import AirflowException
-from airflow.models import BaseOperator
 from airflow.providers.google.cloud.hooks.spanner import SpannerHook
 from airflow.providers.google.cloud.links.spanner import SpannerDatabaseLink, SpannerInstanceLink
+from airflow.providers.google.cloud.operators.cloud_base import GoogleCloudBaseOperator
 
 if TYPE_CHECKING:
     from airflow.utils.context import Context
 
 
-class SpannerDeployInstanceOperator(BaseOperator):
+class SpannerDeployInstanceOperator(GoogleCloudBaseOperator):
     """
-    Creates a new Cloud Spanner instance, or if an instance with the same instance_id
-    exists in the specified project, updates the Cloud Spanner instance.
+    Create or update a Cloud Spanner instance.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -126,10 +125,9 @@ class SpannerDeployInstanceOperator(BaseOperator):
         )
 
 
-class SpannerDeleteInstanceOperator(BaseOperator):
+class SpannerDeleteInstanceOperator(GoogleCloudBaseOperator):
     """
-    Deletes a Cloud Spanner instance. If an instance does not exist,
-    no action is taken and the operator succeeds.
+    Delete a Cloud Spanner instance; if an instance does not exist, no action is taken and the task succeeds.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -196,7 +194,7 @@ class SpannerDeleteInstanceOperator(BaseOperator):
             return True
 
 
-class SpannerQueryDatabaseInstanceOperator(BaseOperator):
+class SpannerQueryDatabaseInstanceOperator(GoogleCloudBaseOperator):
     """
     Executes an arbitrary DML query (INSERT, UPDATE, DELETE).
 
@@ -304,13 +302,12 @@ class SpannerQueryDatabaseInstanceOperator(BaseOperator):
         :param queries: queries
         """
         if queries and queries[-1] == "":
-            del queries[-1]
+            queries.pop()
 
 
-class SpannerDeployDatabaseInstanceOperator(BaseOperator):
+class SpannerDeployDatabaseInstanceOperator(GoogleCloudBaseOperator):
     """
-    Creates a new Cloud Spanner database, or if database exists,
-    the operator does nothing.
+    Creates a new Cloud Spanner database; if database exists, the operator does nothing.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -412,7 +409,7 @@ class SpannerDeployDatabaseInstanceOperator(BaseOperator):
         return True
 
 
-class SpannerUpdateDatabaseInstanceOperator(BaseOperator):
+class SpannerUpdateDatabaseInstanceOperator(GoogleCloudBaseOperator):
     """
     Updates a Cloud Spanner database with the specified DDL statement.
 
@@ -514,7 +511,7 @@ class SpannerUpdateDatabaseInstanceOperator(BaseOperator):
             )
 
 
-class SpannerDeleteDatabaseInstanceOperator(BaseOperator):
+class SpannerDeleteDatabaseInstanceOperator(GoogleCloudBaseOperator):
     """
     Deletes a Cloud Spanner database.
 

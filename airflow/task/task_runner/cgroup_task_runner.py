@@ -21,6 +21,7 @@ from __future__ import annotations
 import datetime
 import os
 import uuid
+from typing import TYPE_CHECKING
 
 import psutil
 from cgroupspy import trees
@@ -29,6 +30,9 @@ from airflow.task.task_runner.base_task_runner import BaseTaskRunner
 from airflow.utils.operator_resources import Resources
 from airflow.utils.platform import getuser
 from airflow.utils.process_utils import reap_process_group
+
+if TYPE_CHECKING:
+    from airflow.jobs.local_task_job_runner import LocalTaskJobRunner
 
 
 class CgroupTaskRunner(BaseTaskRunner):
@@ -61,8 +65,8 @@ class CgroupTaskRunner(BaseTaskRunner):
     airflow ALL= (root) NOEXEC: !/bin/chmod /CGROUPS_FOLDER/cpu/airflow/* *
     """
 
-    def __init__(self, local_task_job):
-        super().__init__(local_task_job)
+    def __init__(self, job_runner: LocalTaskJobRunner):
+        super().__init__(job_runner=job_runner)
         self.process = None
         self._finished_running = False
         self._cpu_shares = None
@@ -133,7 +137,7 @@ class CgroupTaskRunner(BaseTaskRunner):
             return
 
         # Create a unique cgroup name
-        cgroup_name = f"airflow/{datetime.datetime.utcnow().strftime('%Y-%m-%d')}/{str(uuid.uuid4())}"
+        cgroup_name = f"airflow/{datetime.datetime.utcnow():%Y-%m-%d}/{uuid.uuid4()}"
 
         self.mem_cgroup_name = f"memory/{cgroup_name}"
         self.cpu_cgroup_name = f"cpu/{cgroup_name}"
@@ -163,7 +167,9 @@ class CgroupTaskRunner(BaseTaskRunner):
         self.log.debug("Starting task process with cgroups cpu,memory: %s", cgroup_name)
         self.process = self.run_command(["cgexec", "-g", f"cpu,memory:{cgroup_name}"])
 
-    def return_code(self, timeout: int = 0) -> int | None:
+    def return_code(self, timeout: float = 0) -> int | None:
+        if self.process is None:
+            return None
         return_code = self.process.poll()
         # TODO(plypaul) Monitoring the control file in the cgroup fs is better than
         # checking the return code here. The PR to use this is here:
@@ -232,3 +238,8 @@ class CgroupTaskRunner(BaseTaskRunner):
                 group_name = line_split[2]
                 subsystem_cgroup_map[subsystem] = group_name
             return subsystem_cgroup_map
+
+    def get_process_pid(self) -> int:
+        if self.process is None:
+            raise RuntimeError("Process is not started yet")
+        return self.process.pid

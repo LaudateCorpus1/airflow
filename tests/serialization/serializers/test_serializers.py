@@ -19,7 +19,7 @@ from __future__ import annotations
 import datetime
 import decimal
 
-import numpy
+import numpy as np
 import pendulum.tz
 import pytest
 from pendulum import DateTime
@@ -81,7 +81,7 @@ class TestSerializers:
         }
 
     def test_numpy(self):
-        i = numpy.int16(10)
+        i = np.int16(10)
         e = serialize(i)
         d = deserialize(e)
         assert i == d
@@ -91,3 +91,11 @@ class TestSerializers:
         e = serialize(i)
         d = deserialize(e)
         assert i["x"] == d["x"]
+
+    def test_pandas(self):
+        import pandas as pd
+
+        i = pd.DataFrame(data={"col1": [1, 2], "col2": [3, 4]})
+        e = serialize(i)
+        d = deserialize(e)
+        assert i.equals(d)

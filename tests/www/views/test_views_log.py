@@ -49,7 +49,8 @@ DAG_ID = "dag_for_testing_log_view"
 DAG_ID_REMOVED = "removed_dag_for_testing_log_view"
 TASK_ID = "task_for_testing_log_view"
 DEFAULT_DATE = timezone.datetime(2017, 9, 1)
-ENDPOINT = f"log?dag_id={DAG_ID}&task_id={TASK_ID}&execution_date={DEFAULT_DATE}"
+STR_DEFAULT_DATE = urllib.parse.quote(DEFAULT_DATE.strftime("%Y-%m-%dT%H:%M:%S.%f%z"))
+ENDPOINT = f"log?dag_id={DAG_ID}&task_id={TASK_ID}&execution_date={STR_DEFAULT_DATE}"
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -73,7 +74,12 @@ def log_app(backup_modules, log_path):
             "init_api_connexion",
         ]
     )
-    @conf_vars({("logging", "logging_config_class"): "airflow_local_settings.LOGGING_CONFIG"})
+    @conf_vars(
+        {
+            ("logging", "logging_config_class"): "airflow_local_settings.LOGGING_CONFIG",
+            ("webserver", "auth_rate_limited"): "False",
+        }
+    )
     def factory():
         app = create_app(testing=True)
         app.config["WTF_CSRF_ENABLED"] = False

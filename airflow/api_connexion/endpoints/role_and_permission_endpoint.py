@@ -17,11 +17,12 @@
 from __future__ import annotations
 
 from http import HTTPStatus
+from typing import TYPE_CHECKING
 
 from connexion import NoContent
 from flask import request
 from marshmallow import ValidationError
-from sqlalchemy import asc, desc, func
+from sqlalchemy import asc, desc, func, select
 
 from airflow.api_connexion import security
 from airflow.api_connexion.exceptions import AlreadyExists, BadRequest, NotFound
@@ -33,18 +34,20 @@ from airflow.api_connexion.schemas.role_and_permission_schema import (
     role_collection_schema,
     role_schema,
 )
-from airflow.api_connexion.types import APIResponse, UpdateMask
+from airflow.auth.managers.fab.models import Action, Role
 from airflow.security import permissions
 from airflow.utils.airflow_flask_app import get_airflow_app
-from airflow.www.fab_security.sqla.models import Action, Role
-from airflow.www.security import AirflowSecurityManager
+
+if TYPE_CHECKING:
+    from airflow.api_connexion.types import APIResponse, UpdateMask
+    from airflow.www.security_manager import AirflowSecurityManagerV2
 
 
-def _check_action_and_resource(sm: AirflowSecurityManager, perms: list[tuple[str, str]]) -> None:
+def _check_action_and_resource(sm: AirflowSecurityManagerV2, perms: list[tuple[str, str]]) -> None:
     """
-    Checks if the action or resource exists and otherwise raise 400.
+    Check if the action or resource exists and otherwise raise 400.
 
-    This function is intended for use in the REST API because it raise 400
+    This function is intended for use in the REST API because it raises an HTTP error 400
     """
     for action, resource in perms:
         if not sm.get_action(action):
@@ -69,7 +72,7 @@ def get_roles(*, order_by: str = "name", limit: int, offset: int | None = None) 
     """Get roles."""
     appbuilder = get_airflow_app().appbuilder
     session = appbuilder.get_session
-    total_entries = session.query(func.count(Role.id)).scalar()
+    total_entries = session.scalars(select(func.count(Role.id))).one()
     direction = desc if order_by.startswith("-") else asc
     to_replace = {"role_id": "id"}
     order_param = order_by.strip("-")
@@ -81,8 +84,12 @@ def get_roles(*, order_by: str = "name", limit: int, offset: int | None = None) 
             f"the attribute does not exist on the model"
         )
 
-    query = session.query(Role)
-    roles = query.order_by(direction(getattr(Role, order_param))).offset(offset).limit(limit).all()
+    query = select(Role)
+    roles = (
+        session.scalars(query.order_by(direction(getattr(Role, order_param))).offset(offset).limit(limit))
+        .unique()
+        .all()
+    )
 
     return role_collection_schema.dump(RoleCollection(roles=roles, total_entries=total_entries))
 
@@ -92,9 +99,9 @@ def get_roles(*, order_by: str = "name", limit: int, offset: int | None = None) 
 def get_permissions(*, limit: int, offset: int | None = None) -> APIResponse:
     """Get permissions."""
     session = get_airflow_app().appbuilder.get_session
-    total_entries = session.query(func.count(Action.id)).scalar()
-    query = session.query(Action)
-    actions = query.offset(offset).limit(limit).all()
+    total_entries = session.scalars(select(func.count(Action.id))).one()
+    query = select(Action)
+    actions = session.scalars(query.offset(offset).limit(limit)).all()
     return action_collection_schema.dump(ActionCollection(actions=actions, total_entries=total_entries))
 
 
@@ -126,7 +133,7 @@ def patch_role(*, role_name: str, update_mask: UpdateMask = None) -> APIResponse
         update_mask = [i.strip() for i in update_mask]
         data_ = {}
         for field in update_mask:
-            if field in data and not field == "permissions":
+            if field in data and field != "permissions":
                 data_[field] = data[field]
             elif field == "actions":
                 data_["permissions"] = data["permissions"]

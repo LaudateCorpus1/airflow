@@ -70,7 +70,7 @@ PythonVirtualenvOperator
 ========================
 
 Use the ``@task.virtualenv`` decorator to execute Python callables inside a new Python virtual environment.
-The ``virtualenv`` package needs to be installed in the environment that runs Airflow (as optional dependency ``pip install airflow[virtualenv] --constraint ...``).
+The ``virtualenv`` package needs to be installed in the environment that runs Airflow (as optional dependency ``pip install apache-airflow[virtualenv] --constraint ...``).
 
 .. warning::
     The ``@task.virtualenv`` decorator is recommended over the classic :class:`~airflow.operators.python.PythonVirtualenvOperator`
@@ -111,6 +111,20 @@ If additional parameters for package installation are needed pass them in ``requ
   AnotherPackage==1.4.3 --no-index --find-links /my/local/archives
 
 All supported options are listed in the `requirements file format <https://pip.pypa.io/en/stable/reference/requirements-file-format/#supported-options>`_.
+
+Virtualenv setup options
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+The virtualenv is created based on the global python pip configuration on your worker. Using additional ENVs in your environment or adjustments in the general
+pip configuration as described in `pip config <https://pip.pypa.io/en/stable/topics/configuration/>`_.
+
+If you want to use additional task specific private python repositories to setup the virtualenv, you can pass the ``index_urls`` parameter which will adjust the
+pip install configurations. Passed index urls replace the standard system configured index url settings.
+To prevent adding secrets to the private repository in your DAG code you can use the Airflow
+:doc:`../../authoring-and-scheduling/connections`. For this purpose the connection type ``Package Index (Python)`` can be used.
+
+In the special case you want to prevent remote calls for setup of a virtualenv, pass the ``index_urls`` as empty list as ``index_urls=[]`` which
+forced pip installer to use the ``--no-index`` option.
 
 
 .. _howto/operator:ExternalPythonOperator:
@@ -225,11 +239,17 @@ Jinja templating can be used in same way as described for the PythonOperator.
 PythonSensor
 ============
 
-Use the :class:`~airflow.sensors.python.PythonSensor` to use arbitrary callable for sensing. The callable
-should return True when it succeeds, False otherwise.
+Sensors can be used in two ways. One is to use the :class:`~airflow.sensors.python.PythonSensor` to use arbitrary callable for sensing. The callable
+should return True when it succeeds, False otherwise. The other uses the Taskflow API utilizing the :class:`~airflow.decorators.task.sensor` as a decorator on a function.
 
 .. exampleinclude:: /../../airflow/example_dags/example_sensors.py
     :language: python
     :dedent: 4
     :start-after: [START example_python_sensors]
     :end-before: [END example_python_sensors]
+
+.. exampleinclude:: /../../airflow/example_dags/example_sensor_decorator.py
+    :language: python
+    :dedent: 4
+    :start-after: [START wait_function]
+    :end-before: [END wait_function]

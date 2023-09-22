@@ -20,42 +20,48 @@ from __future__ import annotations
 import logging
 import sys
 import warnings
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
 
 import pendulum
 
-from airflow.callbacks.base_callback_sink import BaseCallbackSink
-from airflow.callbacks.callback_requests import CallbackRequest
+from airflow.cli.cli_config import DefaultHelpParser
 from airflow.configuration import conf
 from airflow.exceptions import RemovedInAirflow3Warning
-from airflow.models.taskinstance import TaskInstance, TaskInstanceKey
 from airflow.stats import Stats
 from airflow.utils.log.logging_mixin import LoggingMixin
-from airflow.utils.state import State
+from airflow.utils.state import TaskInstanceState
 
 PARALLELISM: int = conf.getint("core", "PARALLELISM")
 
-# Command to execute - list of strings
-# the first element is always "airflow".
-# It should be result of TaskInstance.generate_command method.q
-CommandType = List[str]
+if TYPE_CHECKING:
+    import argparse
+    from datetime import datetime
 
+    from airflow.callbacks.base_callback_sink import BaseCallbackSink
+    from airflow.callbacks.callback_requests import CallbackRequest
+    from airflow.cli.cli_config import GroupCommand
+    from airflow.models.taskinstance import TaskInstance
+    from airflow.models.taskinstancekey import TaskInstanceKey
 
-# Task that is queued. It contains all the information that is
-# needed to run the task.
-#
-# Tuple of: command, priority, queue name, TaskInstance
-QueuedTaskInstanceType = Tuple[CommandType, int, Optional[str], TaskInstance]
+    # Command to execute - list of strings
+    # the first element is always "airflow".
+    # It should be result of TaskInstance.generate_command method.
+    CommandType = List[str]
 
-# Event_buffer dict value type
-# Tuple of: state, info
-EventBufferValueType = Tuple[Optional[str], Any]
+    # Task that is queued. It contains all the information that is
+    # needed to run the task.
+    #
+    # Tuple of: command, priority, queue name, TaskInstance
+    QueuedTaskInstanceType = Tuple[CommandType, int, Optional[str], TaskInstance]
 
-# Task tuple to send to be executed
-TaskTuple = Tuple[TaskInstanceKey, CommandType, Optional[str], Optional[Any]]
+    # Event_buffer dict value type
+    # Tuple of: state, info
+    EventBufferValueType = Tuple[Optional[str], Any]
+
+    # Task tuple to send to be executed
+    TaskTuple = Tuple[TaskInstanceKey, CommandType, Optional[str], Optional[Any]]
 
 log = logging.getLogger(__name__)
 
@@ -76,14 +82,11 @@ class RunningRetryAttemptType:
 
     @property
     def elapsed(self):
-        """Seconds since first attempt"""
+        """Seconds since first attempt."""
         return (pendulum.now("UTC") - self.first_attempt_time).total_seconds()
 
     def can_try_again(self):
-        """
-        If there has been at least one try greater than MIN_SECONDS after first attempt,
-        then return False.  Otherwise, return True.
-        """
+        """Return False if there has been at least one try greater than MIN_SECONDS, otherwise return True."""
         if self.tries_after_min > 0:
             return False
 
@@ -98,30 +101,29 @@ class RunningRetryAttemptType:
 
 class BaseExecutor(LoggingMixin):
     """
-    Class to derive in order to implement concrete executors.
-    Such as, Celery, Kubernetes, Local, Sequential and the likes.
+    Base class to inherit for concrete executors such as Celery, Kubernetes, Local, Sequential, etc.
 
-    :param parallelism: how many jobs should run at one time. Set to
-        ``0`` for infinity.
+    :param parallelism: how many jobs should run at one time. Set to ``0`` for infinity.
     """
 
     supports_ad_hoc_ti_run: bool = False
     supports_pickling: bool = True
     supports_sentry: bool = False
 
-    job_id: None | int | str = None
-    callback_sink: BaseCallbackSink | None = None
-
     is_local: bool = False
     is_single_threaded: bool = False
-    change_sensor_mode_to_reschedule: bool = False
+    is_production: bool = True
 
+    change_sensor_mode_to_reschedule: bool = False
     serve_logs: bool = False
+
+    job_id: None | int | str = None
+    callback_sink: BaseCallbackSink | None = None
 
     def __init__(self, parallelism: int = PARALLELISM):
         super().__init__()
         self.parallelism: int = parallelism
-        self.queued_tasks: OrderedDict[TaskInstanceKey, QueuedTaskInstanceType] = OrderedDict()
+        self.queued_tasks: dict[TaskInstanceKey, QueuedTaskInstanceType] = {}
         self.running: set[TaskInstanceKey] = set()
         self.event_buffer: dict[TaskInstanceKey, EventBufferValueType] = {}
         self.attempts: dict[TaskInstanceKey, RunningRetryAttemptType] = defaultdict(RunningRetryAttemptType)
@@ -150,7 +152,7 @@ class BaseExecutor(LoggingMixin):
         self,
         task_instance: TaskInstance,
         mark_success: bool = False,
-        pickle_id: str | None = None,
+        pickle_id: int | None = None,
         ignore_all_deps: bool = False,
         ignore_depends_on_past: bool = False,
         wait_for_past_depends_before_skipping: bool = False,
@@ -188,7 +190,7 @@ class BaseExecutor(LoggingMixin):
 
     def has_task(self, task_instance: TaskInstance) -> bool:
         """
-        Checks if a task is either queued or running in this executor.
+        Check if a task is either queued or running in this executor.
 
         :param task_instance: TaskInstance
         :return: True if the task is known to this executor
@@ -198,6 +200,7 @@ class BaseExecutor(LoggingMixin):
     def sync(self) -> None:
         """
         Sync will get called periodically by the heartbeat method.
+
         Executors should override this to perform gather statuses.
         """
 
@@ -215,9 +218,19 @@ class BaseExecutor(LoggingMixin):
         self.log.debug("%s in queue", num_queued_tasks)
         self.log.debug("%s open slots", open_slots)
 
-        Stats.gauge("executor.open_slots", open_slots)
-        Stats.gauge("executor.queued_tasks", num_queued_tasks)
-        Stats.gauge("executor.running_tasks", num_running_tasks)
+        Stats.gauge(
+            "executor.open_slots", value=open_slots, tags={"status": "open", "name": self.__class__.__name__}
+        )
+        Stats.gauge(
+            "executor.queued_tasks",
+            value=num_queued_tasks,
+            tags={"status": "queued", "name": self.__class__.__name__},
+        )
+        Stats.gauge(
+            "executor.running_tasks",
+            value=num_running_tasks,
+            tags={"status": "running", "name": self.__class__.__name__},
+        )
 
         self.trigger_tasks(open_slots)
 
@@ -239,7 +252,7 @@ class BaseExecutor(LoggingMixin):
 
     def trigger_tasks(self, open_slots: int) -> None:
         """
-        Initiates async execution of the queued tasks, up to the number of available slots.
+        Initiate async execution of the queued tasks, up to the number of available slots.
 
         :param open_slots: Number of open slots
         """
@@ -285,9 +298,9 @@ class BaseExecutor(LoggingMixin):
             self.execute_async(key=key, command=command, queue=queue, executor_config=executor_config)
             self.running.add(key)
 
-    def change_state(self, key: TaskInstanceKey, state: str, info=None) -> None:
+    def change_state(self, key: TaskInstanceKey, state: TaskInstanceState, info=None) -> None:
         """
-        Changes state of the task.
+        Change state of the task.
 
         :param info: Executor information for the task instance
         :param key: Unique key for the task instance
@@ -297,7 +310,7 @@ class BaseExecutor(LoggingMixin):
         try:
             self.running.remove(key)
         except KeyError:
-            self.log.debug("Could not find key: %s", str(key))
+            self.log.debug("Could not find key: %s", key)
         self.event_buffer[key] = state, info
 
     def fail(self, key: TaskInstanceKey, info=None) -> None:
@@ -307,7 +320,7 @@ class BaseExecutor(LoggingMixin):
         :param info: Executor information for the task instance
         :param key: Unique key for the task instance
         """
-        self.change_state(key, State.FAILED, info)
+        self.change_state(key, TaskInstanceState.FAILED, info)
 
     def success(self, key: TaskInstanceKey, info=None) -> None:
         """
@@ -316,7 +329,7 @@ class BaseExecutor(LoggingMixin):
         :param info: Executor information for the task instance
         :param key: Unique key for the task instance
         """
-        self.change_state(key, State.SUCCESS, info)
+        self.change_state(key, TaskInstanceState.SUCCESS, info)
 
     def get_event_buffer(self, dag_ids=None) -> dict[TaskInstanceKey, EventBufferValueType]:
         """
@@ -347,7 +360,7 @@ class BaseExecutor(LoggingMixin):
         executor_config: Any | None = None,
     ) -> None:  # pragma: no cover
         """
-        This method will execute the command asynchronously.
+        Execute the command asynchronously.
 
         :param key: Unique key for the task instance
         :param command: Command to run
@@ -356,13 +369,13 @@ class BaseExecutor(LoggingMixin):
         """
         raise NotImplementedError()
 
-    def get_task_log(self, ti: TaskInstance) -> tuple[list[str], list[str]]:
+    def get_task_log(self, ti: TaskInstance, try_number: int) -> tuple[list[str], list[str]]:
         """
-        This method can be implemented by any child class to return the task logs.
+        Return the task logs.
 
         :param ti: A TaskInstance object
-        :param log: log str
-        :return: logs or tuple of logs and meta dict
+        :param try_number: current try_number to read log from
+        :return: tuple of logs and messages
         """
         return [], []
 
@@ -371,7 +384,20 @@ class BaseExecutor(LoggingMixin):
         raise NotImplementedError()
 
     def terminate(self):
-        """This method is called when the daemon receives a SIGTERM."""
+        """Get called when the daemon receives a SIGTERM."""
+        raise NotImplementedError()
+
+    def cleanup_stuck_queued_tasks(self, tis: list[TaskInstance]) -> list[str]:  # pragma: no cover
+        """
+        Handle remnants of tasks that were failed because they were stuck in queued.
+
+        Tasks can get stuck in queued. If such a task is detected, it will be marked
+        as `UP_FOR_RETRY` if the task instance has remaining retries or marked as `FAILED`
+        if it doesn't.
+
+        :param tis: List of Task Instances to clean up
+        :return: List of readable task instances for a warning message
+        """
         raise NotImplementedError()
 
     def try_adopt_task_instances(self, tis: Sequence[TaskInstance]) -> Sequence[TaskInstance]:
@@ -434,7 +460,7 @@ class BaseExecutor(LoggingMixin):
         return None, None
 
     def debug_dump(self):
-        """Called in response to SIGUSR2 by the scheduler."""
+        """Get called in response to SIGUSR2 by the scheduler."""
         self.log.info(
             "executor.queued (%d)\n\t%s",
             len(self.queued_tasks),
@@ -448,7 +474,7 @@ class BaseExecutor(LoggingMixin):
         )
 
     def send_callback(self, request: CallbackRequest) -> None:
-        """Sends callback for execution.
+        """Send callback for execution.
 
         Provides a default implementation which sends the callback to the `callback_sink` object.
 
@@ -457,3 +483,27 @@ class BaseExecutor(LoggingMixin):
         if not self.callback_sink:
             raise ValueError("Callback sink is not ready.")
         self.callback_sink.send(request)
+
+    @staticmethod
+    def get_cli_commands() -> list[GroupCommand]:
+        """Vends CLI commands to be included in Airflow CLI.
+
+        Override this method to expose commands via Airflow CLI to manage this executor. This can
+        be commands to setup/teardown the executor, inspect state, etc.
+        Make sure to choose unique names for those commands, to avoid collisions.
+        """
+        return []
+
+    @classmethod
+    def _get_parser(cls) -> argparse.ArgumentParser:
+        """Generate documentation; used by Sphinx argparse.
+
+        :meta private:
+        """
+        from airflow.cli.cli_parser import AirflowHelpFormatter, _add_command
+
+        parser = DefaultHelpParser(prog="airflow", formatter_class=AirflowHelpFormatter)
+        subparsers = parser.add_subparsers(dest="subcommand", metavar="GROUP_OR_COMMAND")
+        for group_command in cls.get_cli_commands():
+            _add_command(subparsers, group_command)
+        return parser

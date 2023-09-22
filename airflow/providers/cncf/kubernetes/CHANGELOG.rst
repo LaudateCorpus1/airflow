@@ -21,8 +21,354 @@
    and you want to add an explanation to the users on how they are supposed to deal with them.
    The changelog is updated and maintained semi-automatically by release manager.
 
+``apache-airflow-providers-cncf-kubernetes``
+
+
 Changelog
 ---------
+
+7.6.0
+.....
+
+Features
+~~~~~~~~
+
+* ``Add 'progress_callback' parameter to 'KubernetesPodOperator' (#34153)``
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Move definition of Pod*Exceptions to pod_generator (#34346)``
+* ``Push to xcom before 'KubernetesPodOperator' deferral (#34209)``
+
+Misc
+~~~~
+
+* ``Refactor: Consolidate import textwrap in providers (#34220)``
+
+7.5.1
+.....
+
+Bug Fixes
+~~~~~~~~~
+
+* ``fix(providers/spark-kubernetes): respect soft_fail argument when exception is raised (#34167)``
+* ``Use 'cached_property' for hook in SparkKubernetesSensor (#34106)``
+* ``Use cached property for hook in SparkKubernetesOperator (#34130)``
+
+Misc
+~~~~
+
+* ``Combine similar if logics in providers (#33987)``
+* ``Remove useless string join from providers (#33968)``
+* ``Refactor unneeded  jumps in providers (#33833)``
+* ``replace loop by any when looking for a positive value in providers (#33984)``
+* ``Move the try outside the loop when this is possible in kubernetes provider (#33977)``
+* ``Replace sequence concatenation by unpacking in Airflow providers (#33933)``
+* ``Replace dict.items by values when key is not used in providers (#33939)``
+* ``Refactor: Consolidate import datetime (#34110)``
+
+7.5.0
+.....
+
+Features
+~~~~~~~~
+
+* ``Add istio test, use curl /quitquitquit to exit sidecar, and some othe… (#33306)``
+* ``Add 'active_deadline_seconds' parameter to 'KubernetesPodOperator' (#33379)``
+* ``Make cluster_context templated (#33604)``
+
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix KubernetesPodOperator duplicating logs when interrupted (#33500)``
+* ``Fix 2.7.0 db migration job errors (#33652)``
+* ``Inspect container state rather than last_state when deciding whether to skip (#33702)``
+* ``Fix kill istio proxy logic (#33779)``
+
+Misc
+~~~~
+
+* ``Introducing class constant to make worker pod log lines configurable (#33378)``
+* ``Adding typing for KPO SCC objects (#33381)``
+* ``Refactor: Remove useless str() calls (#33629)``
+* ``Refactor: Improve detection of duplicates and list sorting (#33675)``
+* ``Refactor Sqlalchemy queries to 2.0 style (Part 7) (#32883)``
+* ``Consolidate import and usage of itertools (#33479)``
+* ``Simplify conditions on len() in other providers (#33569)``
+* ``Import utc from datetime and normalize its import (#33450)``
+* ``Always use 'Literal' from 'typing_extensions' (#33794)``
+* ``Use literal dict instead of calling dict() in providers (#33761)``
+* ``Improve modules import in cncf.kubernetes probvider by move some of them into a type-checking block (#33781)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Fix typos (double words and it's/its) (#33623)``
+   * ``Exclude deprecated "operators.kubernetes_pod" module from provider.yaml (#33641)``
+   * ``D205 Support - Providers - Final Pass (#33303)``
+   * ``Prepare docs for Aug 2023 3rd wave of Providers (#33730)``
+
+7.4.2
+.....
+
+Misc
+~~~~
+
+* ``Add missing re2 dependency to cncf.kubernetes and celery providers (#33237)``
+* ``Make the 'OnFinishAction' enum inherit from str to support passing it to 'KubernetesPodOperatpor' (#33228)``
+* ``Refactor: Simplify code in providers/cncf (#33230)``
+* ``Replace State by TaskInstanceState in Airflow executors (#32627)``
+
+7.4.1
+.....
+
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix waiting the base container when reading the logs of other containers (#33127)``
+* ``Fix: Configurable Docker image of 'xcom_sidecar' (#32858)``
+* ``Fix 'KubernetesPodOperator' sub classes default container_logs (#33090)``
+* ``Consider custom pod labels on pod finding process on 'KubernetesPodOperator' (#33057)``
+
+Misc
+~~~~
+
+* ``aDd documentation generation for CLI commands from executors (#33081)``
+
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Revert "Fix waiting the base container when reading the logs of other containers (#33092)" (#33125)``
+   * ``Fix waiting the base container when reading the logs of other containers (#33092)``
+
+7.4.0
+.....
+
+.. note::
+  This provider release is the first release that has Kubernetes Executor and
+  Local Kubernetes Executor moved from the core ``apache-airflow`` package to the ``cncf.kubernetes``
+  provider package.
+
+Features
+~~~~~~~~
+
+* ``Move all k8S classes to cncf.kubernetes provider (#32767)``
+* ``[AIP-51] Executors vending CLI commands (#29055)``
+* ``Add 'termination_message_policy' parameter to 'KubernetesPodOperator' (#32885)``
+
+Misc
+~~~~
+
+* ``Update the watcher resource version in SparkK8SOp when it's too old (#32768)``
+* ``Add deprecation info to the providers modules and classes docstring (#32536)``
+* ``Raise original import error in CLI vending of executors (#32931)``
+
+7.3.0
+.....
+
+Features
+~~~~~~~~
+
+* ``Logging from all containers in KubernetesOperatorPod (#31663)``
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix async KPO by waiting pod termination in 'execute_complete' before cleanup (#32467)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``D205 Support - Providers: Stragglers and new additions (#32447)``
+
+7.2.0
+.....
+
+Features
+~~~~~~~~
+
+* ``Add 'on_finish_action' to 'KubernetesPodOperator' (#30718)``
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix KubernetesPodOperator validate xcom json and add retries (#32113)``
+* ``Fix 'KubernetesPodTrigger' waiting strategy (#31348)``
+* ``fix spark-kubernetes-operator compatibality (#31798)``
+
+Misc
+~~~~
+
+* ``Add default_deferrable config (#31712)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``D205 Support - Providers: Apache to Common (inclusive) (#32226)``
+   * ``Improve provider documentation and README structure (#32125)``
+   * ``Remove spurious headers for provider changelogs (#32373)``
+   * ``Prepare docs for July 2023 wave of Providers (#32298)``
+
+7.1.0
+.....
+
+.. note::
+  This release dropped support for Python 3.7
+
+
+Features
+~~~~~~~~
+
+* ``KubernetesResourceOperator - KubernetesDeleteResourceOperator & KubernetesCreateResourceOperator (#29930)``
+* ``add a return when the event is yielded in a loop to stop the execution (#31985)``
+* ``Add possibility to disable logging the pod template in a case when task fails (#31595)``
+
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Remove return statement after yield from triggers class (#31703)``
+* ``Fix Fargate logging for AWS system tests (#31622)``
+
+Misc
+~~~~
+
+* ``Remove Python 3.7 support (#30963)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Add D400 pydocstyle check (#31742)``
+   * ``Add discoverability for triggers in provider.yaml (#31576)``
+   * ``Add D400 pydocstyle check - Providers (#31427)``
+   * ``Add note about dropping Python 3.7 for providers (#32015)``
+
+7.0.0
+.....
+
+.. note::
+  This release of provider is only available for Airflow 2.4+ as explained in the
+  `Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/PROVIDERS.rst#minimum-supported-version-of-airflow-for-community-managed-providers>`_.
+
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+.. note::
+  Return None when namespace is not defined in the Kubernetes connection
+
+* ``Remove deprecated features from KubernetesHook (#31402)``
+
+Features
+~~~~~~~~
+
+.. note::
+  If ``kubernetes_default`` connection is not defined, then KubernetesHook / KubernetesPodOperator will behave as though given ``conn_id=None``.
+  This should make it easier to mitigate breaking change introduced in 6.0.0
+
+* ``K8s hook should still work with missing default conn (#31187)``
+* ``Add protocol to define methods relied upon by KubernetesPodOperator (#31298)``
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix kubernetes task decorator pickle error (#31110)``
+
+Misc
+~~~~
+
+* ``Bump minimum Airflow version in providers (#30917)``
+* ``Empty xcom result file log message more specific (#31228)``
+* ``Add options to KubernetesPodOperator (#30992)``
+* ``add missing read for K8S config file from conn in deferred 'KubernetesPodOperator'  (#29498)``
+
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Use 'AirflowProviderDeprecationWarning' in providers (#30975)``
+   * ``Upgrade ruff to 0.0.262 (#30809)``
+   * ``Add full automation for min Airflow version for providers (#30994)``
+   * ``Add cli cmd to list the provider trigger info (#30822)``
+   * ``Fix pod describing on system test failure (#31191)``
+   * ``Docstring improvements (#31375)``
+   * ``Use '__version__' in providers not 'version' (#31393)``
+   * ``Prepare docs for May 2023 wave of Providers (#31252)``
+   * ``Fixing circular import error in providers caused by airflow version check (#31379)``
+
+6.1.0
+.....
+
+Features
+~~~~~~~~
+
+* ``Add multiple exit code handling in skip logic for 'DockerOperator' and 'KubernetesPodOperator' (#30769)``
+* ``Skip KubernetesPodOperator task when it returns a provided exit code (#29000)``
+
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Deprecate 'skip_exit_code' in 'DockerOperator' and 'KubernetesPodOperator' (#30733)``
+  * ``Remove skip_exit_code from KubernetesPodOperator (#30788)``
+
+6.0.0
+.....
+
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+Use ``kubernetes_default`` connection by default in the ``KubernetesPodOperator``.
+
+* ``Use default connection id for KubernetesPodOperator (#28848)``
+
+Features
+~~~~~~~~
+
+* ``Allow to set limits for XCOM container (#28125)``
+
+.. Review and move the new changes to one of the sections above:
+   * ``Add mechanism to suspend providers (#30422)``
+
+5.3.0
+.....
+
+Features
+~~~~~~~~
+
+* ``enhance spark_k8s_operator (#29977)``
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix KubernetesPodOperator xcom push when 'get_logs=False' (#29052)``
+* ``Fixed hanged KubernetesPodOperator (#28336)``
+
+Misc
+~~~~
+* ``Align cncf provider file names with AIP-21 (#29905)``
+* ``Remove "boilerplate" from all taskflow decorators (#30118)``
+* ``Ensure setup/teardown work on a previously decorated function (#30216)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``adding trigger info to provider yaml (#29950)``
+
+5.2.2
+.....
+
+Bug Fixes
+~~~~~~~~~
+
+* ``'KubernetesPodOperator._render_nested_template_fields' improved by changing the conditionals for a map (#29760)``
+
+.. Below changes are excluded from the changelog. Move them to
+   appropriate section above if needed. Do not delete the lines(!):
+   * ``Fix and augment 'check-for-inclusive-language' CI check (#29549)``
+
+5.2.1
+.....
+
+Bug Fixes
+~~~~~~~~~
+
+* ``Fix @task.kubernetes to receive input and send output (#28942)``
 
 5.2.0
 .....
@@ -83,8 +429,9 @@ Misc
 5.0.0
 .....
 
-This release of provider is only available for Airflow 2.3+ as explained in the
-`Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/README.md#support-for-providers>`_.
+.. note::
+  This release of provider is only available for Airflow 2.3+ as explained in the
+  `Apache Airflow providers support policy <https://github.com/apache/airflow/blob/main/PROVIDERS.rst#minimum-supported-version-of-airflow-for-community-managed-providers>`_.
 
 Breaking changes
 ~~~~~~~~~~~~~~~~
@@ -103,10 +450,10 @@ Param ``node_selectors`` has been removed in ``KubernetesPodOperator``; use ``no
 The following backcompat modules for KubernetesPodOperator are removed and you must now use
 the corresponding objects from the kubernetes library:
 
-* ``airflow.providers.cncf.kubernetes.backcompat.pod``
-* ``airflow.providers.cncf.kubernetes.backcompat.pod_runtime_info_env``
-* ``airflow.providers.cncf.kubernetes.backcompat.volume``
-* ``airflow.providers.cncf.kubernetes.backcompat.volume_mount``
+* ``airflow.kubernetes.backcompat.pod``
+* ``airflow.kubernetes.backcompat.pod_runtime_info_env``
+* ``airflow.kubernetes.backcompat.volume``
+* ``airflow.kubernetes.backcompat.volume_mount``
 
 * ``Remove deprecated backcompat objects for KPO (#27518)``
 * ``Remove support for node_selectors param in KPO (#27515)``

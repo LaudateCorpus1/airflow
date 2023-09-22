@@ -35,7 +35,7 @@
 #                        much smaller.
 #
 # Use the same builder frontend version for everyone
-ARG AIRFLOW_EXTRAS="amazon,async,celery,cncf.kubernetes,dask,docker,elasticsearch,ftp,google,google_auth,grpc,hashicorp,http,ldap,microsoft.azure,mysql,odbc,pandas,postgres,redis,sendgrid,sftp,slack,ssh,statsd,virtualenv"
+ARG AIRFLOW_EXTRAS="aiobotocore,amazon,async,celery,cncf.kubernetes,daskexecutor,docker,elasticsearch,ftp,google,google_auth,grpc,hashicorp,http,ldap,microsoft.azure,mysql,odbc,openlineage,pandas,postgres,redis,sendgrid,sftp,slack,snowflake,ssh,statsd,virtualenv"
 ARG ADDITIONAL_AIRFLOW_EXTRAS=""
 ARG ADDITIONAL_PYTHON_DEPS=""
 
@@ -44,11 +44,11 @@ ARG AIRFLOW_UID="50000"
 ARG AIRFLOW_USER_HOME_DIR=/home/airflow
 
 # latest released version here
-ARG AIRFLOW_VERSION="2.5.1"
+ARG AIRFLOW_VERSION="2.7.1"
 
-ARG PYTHON_BASE_IMAGE="python:3.7-slim-bullseye"
+ARG PYTHON_BASE_IMAGE="python:3.8-slim-bullseye"
 
-ARG AIRFLOW_PIP_VERSION=23.0
+ARG AIRFLOW_PIP_VERSION=23.2.1
 ARG AIRFLOW_IMAGE_REPOSITORY="https://github.com/apache/airflow"
 ARG AIRFLOW_IMAGE_README_URL="https://raw.githubusercontent.com/apache/airflow/main/docs/docker-stack/README.md"
 
@@ -73,6 +73,7 @@ FROM scratch as scripts
 
 # The content below is automatically copied from scripts/docker/install_os_dependencies.sh
 COPY <<"EOF" /install_os_dependencies.sh
+#!/usr/bin/env bash
 set -euo pipefail
 
 DOCKER_CLI_VERSION=20.10.9
@@ -94,9 +95,9 @@ fi
 function get_dev_apt_deps() {
     if [[ "${DEV_APT_DEPS=}" == "" ]]; then
         DEV_APT_DEPS="apt-transport-https apt-utils build-essential ca-certificates dirmngr \
-freetds-bin freetds-dev git gosu graphviz graphviz-dev krb5-user ldap-utils libffi-dev \
+freetds-bin freetds-dev git gosu graphviz graphviz-dev krb5-user ldap-utils libffi-dev libgeos-dev \
 libkrb5-dev libldap2-dev libleveldb1d libleveldb-dev libsasl2-2 libsasl2-dev libsasl2-modules \
-libssl-dev locales lsb-release openssh-client sasl2-bin \
+libssl-dev locales lsb-release openssh-client pkgconf sasl2-bin \
 software-properties-common sqlite3 sudo unixodbc unixodbc-dev"
         export DEV_APT_DEPS
     fi
@@ -105,7 +106,7 @@ software-properties-common sqlite3 sudo unixodbc unixodbc-dev"
 function get_runtime_apt_deps() {
     if [[ "${RUNTIME_APT_DEPS=}" == "" ]]; then
         RUNTIME_APT_DEPS="apt-transport-https apt-utils ca-certificates \
-curl dumb-init freetds-bin gosu krb5-user \
+curl dumb-init freetds-bin gosu krb5-user libgeos-dev \
 ldap-utils libffi7 libldap-2.4-2 libsasl2-2 libsasl2-modules libssl1.1 locales \
 lsb-release netcat openssh-client python3-selinux rsync sasl2-bin sqlite3 sudo unixodbc"
         export RUNTIME_APT_DEPS
@@ -175,38 +176,31 @@ EOF
 
 # The content below is automatically copied from scripts/docker/install_mysql.sh
 COPY <<"EOF" /install_mysql.sh
+#!/usr/bin/env bash
 set -euo pipefail
 declare -a packages
 
-MYSQL_VERSION="8.0"
-readonly MYSQL_VERSION
+MYSQL_LTS_VERSION="8.0"
+MARIADB_LTS_VERSION="10.11"
+readonly MYSQL_LTS_VERSION
+readonly MARIADB_LTS_VERSION
 
 COLOR_BLUE=$'\e[34m'
 readonly COLOR_BLUE
+COLOR_YELLOW=$'\e[1;33m'
+readonly COLOR_YELLOW
+COLOR_RED=$'\e[1;31m'
+readonly COLOR_RED
 COLOR_RESET=$'\e[0m'
 readonly COLOR_RESET
 
 : "${INSTALL_MYSQL_CLIENT:?Should be true or false}"
 
-install_mysql_client() {
-    if [[ "${1}" == "dev" ]]; then
-        packages=("libmysqlclient-dev" "mysql-client")
-    elif [[ "${1}" == "prod" ]]; then
-        packages=("libmysqlclient21" "mysql-client")
-    else
-        echo
-        echo "Specify either prod or dev"
-        echo
-        exit 1
-    fi
+export_key() {
+    local key="${1}"
+    local name="${2:-mysql}"
 
-    echo
-    echo "${COLOR_BLUE}Installing mysql client version ${MYSQL_VERSION}: ${1}${COLOR_RESET}"
-    echo
-
-    local key="467B942D3A79BD29"
-    readonly key
-
+    echo "${COLOR_BLUE}Verify and export GPG public key ${key}${COLOR_RESET}"
     GNUPGHOME="$(mktemp -d)"
     export GNUPGHOME
     set +e
@@ -216,30 +210,99 @@ install_mysql_client() {
         gpg --keyserver "${keyserver}" --recv-keys "${key}" 2>&1 && break
     done
     set -e
-    gpg --export "${key}" > /etc/apt/trusted.gpg.d/mysql.gpg
+    gpg --export "${key}" > "/etc/apt/trusted.gpg.d/${name}.gpg"
     gpgconf --kill all
     rm -rf "${GNUPGHOME}"
     unset GNUPGHOME
-    echo "deb http://repo.mysql.com/apt/debian/ $(lsb_release -cs) mysql-${MYSQL_VERSION}" > /etc/apt/sources.list.d/mysql.list
+}
+
+install_mysql_client() {
+    if [[ "${1}" == "dev" ]]; then
+        packages=("libmysqlclient-dev" "mysql-client")
+    elif [[ "${1}" == "prod" ]]; then
+        # `libmysqlclientXX` where XX is number, and it should be increased every new GA MySQL release, for example
+        # 18 - MySQL 5.6.48
+        # 20 - MySQL 5.7.42
+        # 21 - MySQL 8.0.34
+        # 22 - MySQL 8.1
+        packages=("libmysqlclient21" "mysql-client")
+    else
+        echo
+        echo "${COLOR_RED}Specify either prod or dev${COLOR_RESET}"
+        echo
+        exit 1
+    fi
+
+    export_key "467B942D3A79BD29" "mysql"
+
+    echo
+    echo "${COLOR_BLUE}Installing Oracle MySQL client version ${MYSQL_LTS_VERSION}: ${1}${COLOR_RESET}"
+    echo
+
+    echo "deb http://repo.mysql.com/apt/debian/ $(lsb_release -cs) mysql-${MYSQL_LTS_VERSION}" > \
+        /etc/apt/sources.list.d/mysql.list
     apt-get update
     apt-get install --no-install-recommends -y "${packages[@]}"
     apt-get autoremove -yqq --purge
     apt-get clean && rm -rf /var/lib/apt/lists/*
 }
 
-if [[ $(uname -m) == "arm64" || $(uname -m) == "aarch64" ]]; then
-    # disable MYSQL for ARM64
-    INSTALL_MYSQL_CLIENT="false"
-fi
+install_mariadb_client() {
+    # List of compatible package Oracle MySQL -> MariaDB:
+    # `mysql-client` -> `mariadb-client` or `mariadb-client-compat` (11+)
+    # `libmysqlclientXX` (where XX is a number) -> `libmariadb3-compat`
+    # `libmysqlclient-dev` -> `libmariadb-dev-compat`
+    #
+    # Different naming against Debian repo which we used before
+    # that some of packages might contains `-compat` suffix, Debian repo -> MariaDB repo:
+    # `libmariadb-dev` -> `libmariadb-dev-compat`
+    # `mariadb-client-core` -> `mariadb-client` or `mariadb-client-compat` (11+)
+    if [[ "${1}" == "dev" ]]; then
+        packages=("libmariadb-dev-compat" "mariadb-client")
+    elif [[ "${1}" == "prod" ]]; then
+        packages=("libmariadb3-compat" "mariadb-client")
+    else
+        echo
+        echo "${COLOR_RED}Specify either prod or dev${COLOR_RESET}"
+        echo
+        exit 1
+    fi
+
+    export_key "0xF1656F24C74CD1D8" "mariadb"
+
+    echo
+    echo "${COLOR_BLUE}Installing MariaDB client version ${MARIADB_LTS_VERSION}: ${1}${COLOR_RESET}"
+    echo "${COLOR_YELLOW}MariaDB client protocol-compatible with MySQL client.${COLOR_RESET}"
+    echo
+
+    curl https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+    echo "deb [arch=amd64,arm64] https://archive.mariadb.org/mariadb-${MARIADB_LTS_VERSION}/repo/debian/ $(lsb_release -cs) main" > \
+        /etc/apt/sources.list.d/mariadb.list
+    # Make sure that dependencies from MariaDB repo are preferred over Debian dependencies
+    printf "Package: *\nPin: release o=MariaDB\nPin-Priority: 999\n" > /etc/apt/preferences.d/mariadb
+    apt-get update
+    apt-get install --no-install-recommends -y "${packages[@]}"
+    apt-get autoremove -yqq --purge
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+}
 
 if [[ ${INSTALL_MYSQL_CLIENT:="true"} == "true" ]]; then
-    install_mysql_client "${@}"
+    if [[ $(uname -m) == "arm64" || $(uname -m) == "aarch64" ]]; then
+        install_mariadb_client "${@}"
+    else
+        install_mysql_client "${@}"
+    fi
 fi
 EOF
 
 # The content below is automatically copied from scripts/docker/install_mssql.sh
 COPY <<"EOF" /install_mssql.sh
+#!/usr/bin/env bash
 set -euo pipefail
+
+. "$( dirname "${BASH_SOURCE[0]}" )/common.sh"
+
+: "${AIRFLOW_PIP_VERSION:?Should be set}"
 
 : "${INSTALL_MSSQL_CLIENT:?Should be true or false}"
 
@@ -273,6 +336,40 @@ function install_mssql_client() {
     rm -rf /var/lib/apt/lists/*
     apt-get autoremove -yqq --purge
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    # Workaround an issue with installing pymssql on ARM architecture triggered by Cython 3.0.0 release as of
+    # 18 July 2023. The problem is that pip uses latest Cython to compile pymssql and since we are using
+    # setuptools, there is no easy way to fix version of Cython used to compile packages.
+    #
+    # This triggers a problem with newer `pip` versions that have build isolation enabled by default because
+    # There is no (easy) way to pin build dependencies for dependent packages. If a package does not have
+    # limit on build dependencies, it will use the latest version of them to build that particular package.
+    #
+    # The workaround to the problem suggest in the last thread by Pradyun Gedam - pip maintainer - is to
+    # use PIP_CONSTRAINT environment variable and constraint the version of Cython used while installing
+    # the package. Which is precisely what we are doing here.
+    #
+    # Note that it does not work if we pass ``--constraint`` option to pip because it will not be passed to
+    # the package being build in isolation. The fact that the PIP_CONSTRAINT env variable works in the isolation
+    # is a bit of side-effect on how env variables work and that they are passed to subprocesses as pip
+    # launches a subprocess `pip` to build the package.
+    #
+    # This is a temporary solution until the issue is resolved in pymssql or Cython
+    # Issues/discussions that track it:
+    #
+    # * https://github.com/cython/cython/issues/5541
+    # * https://github.com/pymssql/pymssql/pull/827
+    # * https://discuss.python.org/t/no-way-to-pin-build-dependencies/29833
+    #
+    # TODO: Remove this workaround when the issue is resolved.
+    #       ALSO REMOVE THE TOP LINES ABOVE WITH common.sh IMPORT AS WELL AS COPYING common.sh ib
+    #       Dockerfile AND Dockerfile.ci (look for capital PYMSSQL - there are several places to remove)
+    if [[ "${1}" == "dev" ]]; then
+        common::install_pip_version
+        echo "Cython==0.29.36" >> /tmp/mssql-constraints.txt
+        PIP_CONSTRAINT=/tmp/mssql-constraints.txt pip install pymssql
+        rm /tmp/mssql-constraints.txt
+    fi
 }
 
 install_mssql_client "${@}"
@@ -280,6 +377,7 @@ EOF
 
 # The content below is automatically copied from scripts/docker/install_postgres.sh
 COPY <<"EOF" /install_postgres.sh
+#!/usr/bin/env bash
 set -euo pipefail
 declare -a packages
 
@@ -321,6 +419,7 @@ EOF
 
 # The content below is automatically copied from scripts/docker/install_pip_version.sh
 COPY <<"EOF" /install_pip_version.sh
+#!/usr/bin/env bash
 . "$( dirname "${BASH_SOURCE[0]}" )/common.sh"
 
 : "${AIRFLOW_PIP_VERSION:?Should be set}"
@@ -335,6 +434,7 @@ EOF
 
 # The content below is automatically copied from scripts/docker/install_airflow_dependencies_from_branch_tip.sh
 COPY <<"EOF" /install_airflow_dependencies_from_branch_tip.sh
+#!/usr/bin/env bash
 
 . "$( dirname "${BASH_SOURCE[0]}" )/common.sh"
 
@@ -381,6 +481,7 @@ EOF
 
 # The content below is automatically copied from scripts/docker/common.sh
 COPY <<"EOF" /common.sh
+#!/usr/bin/env bash
 set -euo pipefail
 
 function common::get_colors() {
@@ -408,7 +509,7 @@ function common::get_airflow_version_specification() {
 function common::override_pip_version_if_needed() {
     if [[ -n ${AIRFLOW_VERSION} ]]; then
         if [[ ${AIRFLOW_VERSION} =~ ^2\.0.* || ${AIRFLOW_VERSION} =~ ^1\.* ]]; then
-            export AIRFLOW_PIP_VERSION="23.0"
+            export AIRFLOW_PIP_VERSION="23.2.1"
         fi
     fi
 }
@@ -523,17 +624,42 @@ function install_airflow_and_providers_from_docker_context_files(){
         return
     fi
 
-    echo
-    echo "${COLOR_BLUE}Force re-installing airflow and providers from local files with eager upgrade${COLOR_RESET}"
-    echo
-    # force reinstall all airflow + provider package local files with eager upgrade
-    set -x
-    pip install "${pip_flags[@]}" --root-user-action ignore --upgrade --upgrade-strategy eager \
-        ${ADDITIONAL_PIP_INSTALL_FLAGS} \
-        ${reinstalling_apache_airflow_package} ${reinstalling_apache_airflow_providers_packages} \
-        ${EAGER_UPGRADE_ADDITIONAL_REQUIREMENTS}
-    set +x
+    if [[ ${USE_CONSTRAINTS_FOR_CONTEXT_PACKAGES=} == "true" ]]; then
+        local python_version
+        python_version=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        local local_constraints_file=/docker-context-files/constraints-"${python_version}"/${AIRFLOW_CONSTRAINTS_MODE}-"${python_version}".txt
 
+        if [[ -f "${local_constraints_file}" ]]; then
+            echo
+            echo "${COLOR_BLUE}Installing docker-context-files packages with constraints found in ${local_constraints_file}${COLOR_RESET}"
+            echo
+            # force reinstall all airflow + provider packages with constraints found in
+            set -x
+            pip install "${pip_flags[@]}" --root-user-action ignore --upgrade \
+                ${ADDITIONAL_PIP_INSTALL_FLAGS} --constraint "${local_constraints_file}" \
+                ${reinstalling_apache_airflow_package} ${reinstalling_apache_airflow_providers_packages}
+            set +x
+        else
+            echo
+            echo "${COLOR_BLUE}Installing docker-context-files packages with constraints from GitHub${COLOR_RESET}"
+            echo
+            set -x
+            pip install "${pip_flags[@]}" --root-user-action ignore \
+                ${ADDITIONAL_PIP_INSTALL_FLAGS} \
+                --constraint "${AIRFLOW_CONSTRAINTS_LOCATION}" \
+                ${reinstalling_apache_airflow_package} ${reinstalling_apache_airflow_providers_packages}
+            set +x
+        fi
+    else
+        echo
+        echo "${COLOR_BLUE}Installing docker-context-files packages without constraints${COLOR_RESET}"
+        echo
+        set -x
+        pip install "${pip_flags[@]}" --root-user-action ignore \
+            ${ADDITIONAL_PIP_INSTALL_FLAGS} \
+            ${reinstalling_apache_airflow_package} ${reinstalling_apache_airflow_providers_packages}
+        set +x
+    fi
     common::install_pip_version
     pip check
 }
@@ -570,6 +696,7 @@ EOF
 
 # The content below is automatically copied from scripts/docker/install_airflow.sh
 COPY <<"EOF" /install_airflow.sh
+#!/usr/bin/env bash
 
 . "$( dirname "${BASH_SOURCE[0]}" )/common.sh"
 
@@ -602,7 +729,7 @@ function install_airflow() {
         pip install --root-user-action ignore --upgrade --upgrade-strategy eager \
             ${ADDITIONAL_PIP_INSTALL_FLAGS} \
             "${AIRFLOW_INSTALLATION_METHOD}[${AIRFLOW_EXTRAS}]${AIRFLOW_VERSION_SPECIFICATION}" \
-            ${EAGER_UPGRADE_ADDITIONAL_REQUIREMENTS}
+            ${EAGER_UPGRADE_ADDITIONAL_REQUIREMENTS=}
         if [[ -n "${AIRFLOW_INSTALL_EDITABLE_FLAG}" ]]; then
             # Remove airflow and reinstall it using editable flag
             # We can only do it when we install airflow from sources
@@ -655,11 +782,11 @@ EOF
 
 # The content below is automatically copied from scripts/docker/install_additional_dependencies.sh
 COPY <<"EOF" /install_additional_dependencies.sh
+#!/usr/bin/env bash
 set -euo pipefail
 
 : "${UPGRADE_TO_NEWER_DEPENDENCIES:?Should be true or false}"
 : "${ADDITIONAL_PYTHON_DEPS:?Should be set}"
-: "${EAGER_UPGRADE_ADDITIONAL_REQUIREMENTS:?Should be set}"
 : "${AIRFLOW_PIP_VERSION:?Should be set}"
 
 . "$( dirname "${BASH_SOURCE[0]}" )/common.sh"
@@ -672,7 +799,7 @@ function install_additional_dependencies() {
         set -x
         pip install --root-user-action ignore --upgrade --upgrade-strategy eager \
             ${ADDITIONAL_PIP_INSTALL_FLAGS} \
-            ${ADDITIONAL_PYTHON_DEPS} ${EAGER_UPGRADE_ADDITIONAL_REQUIREMENTS}
+            ${ADDITIONAL_PYTHON_DEPS} ${EAGER_UPGRADE_ADDITIONAL_REQUIREMENTS=}
         common::install_pip_version
         set +x
         echo
@@ -881,9 +1008,9 @@ function wait_for_airflow_db() {
     run_check_with_retries "airflow db check"
 }
 
-function upgrade_db() {
-    # Runs airflow db upgrade
-    airflow db upgrade || true
+function migrate_db() {
+    # Runs airflow db migrate
+    airflow db migrate || true
 }
 
 function wait_for_celery_broker() {
@@ -961,8 +1088,12 @@ if [[ "${CONNECTION_CHECK_MAX_COUNT}" -gt "0" ]]; then
     wait_for_airflow_db
 fi
 
+if [[ -n "${_AIRFLOW_DB_UPGRADE=}" ]] || [[ -n "${_AIRFLOW_DB_MIGRATE=}" ]] ; then
+    migrate_db
+fi
+
 if [[ -n "${_AIRFLOW_DB_UPGRADE=}" ]] ; then
-    upgrade_db
+    >&2 echo "WARNING: Environment variable '_AIRFLOW_DB_UPGRADE' is deprecated please use '_AIRFLOW_DB_MIGRATE' instead"
 fi
 
 if [[ -n "${_AIRFLOW_WWW_USER_CREATE=}" ]] ; then
@@ -979,7 +1110,7 @@ if [[ -n "${_PIP_ADDITIONAL_REQUIREMENTS=}" ]] ; then
     >&2 echo "         https://airflow.apache.org/docs/docker-stack/build.html"
     >&2 echo
     >&2 echo "         Adding requirements at container startup is fragile and is done every time"
-    >&2 echo "         the container starts, so it is onlny useful for testing and trying out"
+    >&2 echo "         the container starts, so it is only useful for testing and trying out"
     >&2 echo "         of adding dependencies."
     >&2 echo
     pip install --root-user-action ignore --no-cache-dir ${_PIP_ADDITIONAL_REQUIREMENTS}
@@ -1023,6 +1154,8 @@ while true; do
     -type d -name 'lost+found' -prune -o \
     -type f -mtime +"${RETENTION}" -name '*.log' -print0 | \
     xargs -0 rm -f
+
+  find "${DIRECTORY}"/logs -type d -empty -delete
 
   seconds=$(( $(date -u +%s) % EVERY))
   (( seconds < 1 )) || sleep $((EVERY - seconds - 1))
@@ -1133,8 +1266,15 @@ ENV INSTALL_MYSQL_CLIENT=${INSTALL_MYSQL_CLIENT} \
 # scripts which are needed much later will not invalidate the docker layer here
 COPY --from=scripts install_mysql.sh install_mssql.sh install_postgres.sh /scripts/docker/
 
+# THE 3 LINES ARE ONLY NEEDED IN ORDER TO MAKE PYMSSQL BUILD WORK WITH LATEST CYTHON
+# AND SHOULD BE REMOVED WHEN WORKAROUND IN install_mssql.sh IS REMOVED
+ARG AIRFLOW_PIP_VERSION=23.2.1
+ENV AIRFLOW_PIP_VERSION=${AIRFLOW_PIP_VERSION}
+COPY --from=scripts common.sh /scripts/docker/
+
+
 RUN bash /scripts/docker/install_mysql.sh dev && \
-    bash /scripts/docker/install_mssql.sh && \
+    bash /scripts/docker/install_mssql.sh dev && \
     bash /scripts/docker/install_postgres.sh dev
 ENV PATH=${PATH}:/opt/mssql-tools/bin
 
@@ -1196,6 +1336,12 @@ COPY --from=scripts common.sh install_pip_version.sh \
 # is installed from docker-context files rather than from PyPI)
 ARG INSTALL_PACKAGES_FROM_CONTEXT="false"
 
+# Normally constraints are not used when context packages are build - because we might have packages
+# that are conflicting with Airflow constraints, however there are cases when we want to use constraints
+# for example in CI builds when we already have source-package constraints - either from github branch or
+# from eager-upgraded constraints by the CI builds
+ARG USE_CONSTRAINTS_FOR_CONTEXT_PACKAGES="false"
+
 # In case of Production build image segment we want to pre-install main version of airflow
 # dependencies from GitHub so that we do not have to always reinstall it from the scratch.
 # The Airflow (and providers in case INSTALL_PROVIDERS_FROM_SOURCES is "false")
@@ -1215,23 +1361,13 @@ COPY --chown=airflow:0 ${AIRFLOW_SOURCES_FROM} ${AIRFLOW_SOURCES_TO}
 # Add extra python dependencies
 ARG ADDITIONAL_PYTHON_DEPS=""
 
-# Those are additional constraints that are needed for some extras but we do not want to
-# Force them on the main Airflow package.
-# * dill<0.3.3 required by apache-beam
-# * pyarrow>=6.0.0 is because pip resolver decides for Python 3.10 to downgrade pyarrow to 5 even if it is OK
-#   for python 3.10 and other dependencies adding the limit helps resolver to make better decisions
-# We need to limit the protobuf library to < 4.21.0 because not all google libraries we use
-# are compatible with the new protobuf version. All the google python client libraries need
-# to be upgraded to >=2.0.0 in order to able to lift that limitation
-# https://developers.google.com/protocol-buffers/docs/news/2022-05-06#python-updates
-# * authlib, gcloud_aio_auth, adal are needed to generate constraints for PyPI packages and can be removed after we release
-#   new google, azure providers
-# !!! MAKE SURE YOU SYNCHRONIZE THE LIST BETWEEN: Dockerfile, Dockerfile.ci, find_newer_dependencies.py
-ARG EAGER_UPGRADE_ADDITIONAL_REQUIREMENTS="dill<0.3.3 pyarrow>=6.0.0 protobuf<4.21.0 authlib>=1.0.0 gcloud_aio_auth>=4.0.0 adal>=1.2.7"
+
+ARG VERSION_SUFFIX_FOR_PYPI=""
 
 ENV ADDITIONAL_PYTHON_DEPS=${ADDITIONAL_PYTHON_DEPS} \
     INSTALL_PACKAGES_FROM_CONTEXT=${INSTALL_PACKAGES_FROM_CONTEXT} \
-    EAGER_UPGRADE_ADDITIONAL_REQUIREMENTS=${EAGER_UPGRADE_ADDITIONAL_REQUIREMENTS}
+    USE_CONSTRAINTS_FOR_CONTEXT_PACKAGES=${USE_CONSTRAINTS_FOR_CONTEXT_PACKAGES} \
+    VERSION_SUFFIX_FOR_PYPI=${VERSION_SUFFIX_FOR_PYPI}
 
 WORKDIR ${AIRFLOW_HOME}
 
@@ -1263,7 +1399,7 @@ RUN if [[ -f /docker-context-files/requirements.txt ]]; then \
 
 ##############################################################################################
 # This is the actual Airflow image - much smaller than the build one. We copy
-# installed Airflow and all it's dependencies from the build image to make it smaller.
+# installed Airflow and all its dependencies from the build image to make it smaller.
 ##############################################################################################
 FROM ${PYTHON_BASE_IMAGE} as main
 
@@ -1324,6 +1460,12 @@ ENV PATH="${AIRFLOW_USER_HOME_DIR}/.local/bin:${PATH}" \
     AIRFLOW_USER_HOME_DIR=${AIRFLOW_USER_HOME_DIR} \
     AIRFLOW_HOME=${AIRFLOW_HOME}
 
+# THE 3 LINES ARE ONLY NEEDED IN ORDER TO MAKE PYMSSQL BUILD WORK WITH LATEST CYTHON
+# AND SHOULD BE REMOVED WHEN WORKAROUND IN install_mssql.sh IS REMOVED
+ARG AIRFLOW_PIP_VERSION=23.2.1
+ENV AIRFLOW_PIP_VERSION=${AIRFLOW_PIP_VERSION}
+COPY --from=scripts common.sh /scripts/docker/
+
 # Only copy mysql/mssql installation scripts for now - so that changing the other
 # scripts which are needed much later will not invalidate the docker layer here.
 COPY --from=scripts install_mysql.sh install_mssql.sh install_postgres.sh /scripts/docker/
@@ -1332,7 +1474,7 @@ COPY --from=scripts install_mysql.sh install_mssql.sh install_postgres.sh /scrip
 # had different umask set and group x bit was not set. In Azure the bit might be not set at all.
 # That also protects against AUFS Docker backend problem where changing the executable bit required sync
 RUN bash /scripts/docker/install_mysql.sh prod \
-    && bash /scripts/docker/install_mssql.sh \
+    && bash /scripts/docker/install_mssql.sh prod \
     && bash /scripts/docker/install_postgres.sh prod \
     && adduser --gecos "First Last,RoomNumber,WorkPhone,HomePhone" --disabled-password \
            --quiet "airflow" --uid "${AIRFLOW_UID}" --gid "0" --home "${AIRFLOW_USER_HOME_DIR}" \

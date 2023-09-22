@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 class SingularityOperator(BaseOperator):
     """
-    Execute a command inside a Singularity container
+    Execute a command inside a Singularity container.
 
     Singularity has more seamless connection to the host than Docker, so
     no special binds are needed to ensure binding content in the user $HOME
@@ -155,9 +155,8 @@ class SingularityOperator(BaseOperator):
         self.log.info("Stopping instance %s", self.instance)
         self.instance.stop()  # type: ignore[attr-defined]
 
-        if self.auto_remove is True:
-            if self.auto_remove and os.path.exists(self.image):
-                shutil.rmtree(self.image)
+        if self.auto_remove and os.path.exists(self.image):
+            shutil.rmtree(self.image)
 
         # If the container failed, raise the exception
         if result["return_code"] != 0:
@@ -167,7 +166,7 @@ class SingularityOperator(BaseOperator):
         self.log.info("Output from command %s", result["message"])
 
     def _get_command(self) -> Any | None:
-        if self.command is not None and self.command.strip().find("[") == 0:  # type: ignore
+        if self.command is not None and self.command.strip().startswith("["):  # type: ignore
             commands = ast.literal_eval(self.command)
         else:
             commands = self.command
@@ -179,6 +178,5 @@ class SingularityOperator(BaseOperator):
             self.instance.stop()
 
             # If an image exists, clean it up
-            if self.auto_remove is True:
-                if self.auto_remove and os.path.exists(self.image):
-                    shutil.rmtree(self.image)
+            if self.auto_remove and os.path.exists(self.image):
+                shutil.rmtree(self.image)

@@ -28,7 +28,7 @@ T = TypeVar("T", bound=Callable)
 
 
 def check_authentication() -> None:
-    """Checks that the request has valid authorization information."""
+    """Check that the request has valid authorization information."""
     for auth in get_airflow_app().api_auth:
         response = auth.requires_authentication(Response)()
         if response.status_code == 200:
@@ -39,9 +39,10 @@ def check_authentication() -> None:
 
 
 def requires_access(permissions: Sequence[tuple[str, str]] | None = None) -> Callable[[T], T]:
-    """Factory for decorator that checks current user's permissions against required permissions."""
+    """Check current user's permissions against required permissions."""
     appbuilder = get_airflow_app().appbuilder
-    appbuilder.sm.sync_resource_permissions(permissions)
+    if appbuilder.update_perms:
+        appbuilder.sm.sync_resource_permissions(permissions)
 
     def requires_access_decorator(func: T):
         @wraps(func)

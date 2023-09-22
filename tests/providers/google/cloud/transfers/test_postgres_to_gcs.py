@@ -18,12 +18,9 @@
 from __future__ import annotations
 
 import datetime
-import unittest
 from unittest.mock import patch
 
 import pytest
-import pytz
-from parameterized import parameterized
 
 from airflow.providers.google.cloud.transfers.postgres_to_gcs import PostgresToGCSOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
@@ -50,9 +47,9 @@ SCHEMA_JSON = (
 
 
 @pytest.mark.backend("postgres")
-class TestPostgresToGoogleCloudStorageOperator(unittest.TestCase):
+class TestPostgresToGoogleCloudStorageOperator:
     @classmethod
-    def setUpClass(cls):
+    def setup_class(cls):
         postgres = PostgresHook()
         with postgres.get_conn() as conn:
             with conn.cursor() as cur:
@@ -79,7 +76,7 @@ class TestPostgresToGoogleCloudStorageOperator(unittest.TestCase):
                 )
 
     @classmethod
-    def tearDownClass(cls):
+    def teardown_class(cls):
         postgres = PostgresHook()
         with postgres.get_conn() as conn:
             with conn.cursor() as cur:
@@ -102,7 +99,8 @@ class TestPostgresToGoogleCloudStorageOperator(unittest.TestCase):
         with open(tmp_filename, "rb") as file:
             assert b"".join(NDJSON_LINES) == file.read()
 
-    @parameterized.expand(
+    @pytest.mark.parametrize(
+        "value, expected",
         [
             ("string", "string"),
             (32.9, 32.9),
@@ -111,12 +109,12 @@ class TestPostgresToGoogleCloudStorageOperator(unittest.TestCase):
             (datetime.date(1000, 1, 2), "1000-01-02"),
             (datetime.datetime(1970, 1, 1, 1, 0, tzinfo=None), "1970-01-01T01:00:00"),
             (
-                datetime.datetime(2022, 1, 1, 2, 0, tzinfo=pytz.UTC),
+                datetime.datetime(2022, 1, 1, 2, 0, tzinfo=datetime.timezone.utc),
                 1641002400.0,
             ),
             (datetime.time(hour=0, minute=0, second=0), "0:00:00"),
             (datetime.time(hour=23, minute=59, second=59), "23:59:59"),
-        ]
+        ],
     )
     def test_convert_type(self, value, expected):
         op = PostgresToGCSOperator(

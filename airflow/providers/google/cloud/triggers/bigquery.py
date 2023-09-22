@@ -28,7 +28,7 @@ from airflow.triggers.base import BaseTrigger, TriggerEvent
 
 class BigQueryInsertJobTrigger(BaseTrigger):
     """
-    BigQueryInsertJobTrigger run on the trigger worker to perform insert operation
+    BigQueryInsertJobTrigger run on the trigger worker to perform insert operation.
 
     :param conn_id: Reference to google cloud connection id
     :param job_id:  The ID of the job. It will be suffixed with hash of job configuration
@@ -71,42 +71,41 @@ class BigQueryInsertJobTrigger(BaseTrigger):
             },
         )
 
-    async def run(self) -> AsyncIterator["TriggerEvent"]:  # type: ignore[override]
-        """Gets current job execution status and yields a TriggerEvent"""
+    async def run(self) -> AsyncIterator[TriggerEvent]:  # type: ignore[override]
+        """Gets current job execution status and yields a TriggerEvent."""
         hook = self._get_async_hook()
-        while True:
-            try:
-                # Poll for job execution status
-                response_from_hook = await hook.get_job_status(job_id=self.job_id, project_id=self.project_id)
-                self.log.debug("Response from hook: %s", response_from_hook)
-
-                if response_from_hook == "success":
+        try:
+            while True:
+                job_status = await hook.get_job_status(job_id=self.job_id, project_id=self.project_id)
+                if job_status["status"] == "success":
                     yield TriggerEvent(
                         {
                             "job_id": self.job_id,
-                            "status": "success",
-                            "message": "Job completed",
+                            "status": job_status["status"],
+                            "message": job_status["message"],
                         }
                     )
                     return
-                elif response_from_hook == "pending":
-                    self.log.info("Query is still running...")
-                    self.log.info("Sleeping for %s seconds.", self.poll_interval)
-                    await asyncio.sleep(self.poll_interval)
-                else:
-                    yield TriggerEvent({"status": "error", "message": response_from_hook})
+                elif job_status["status"] == "error":
+                    yield TriggerEvent(job_status)
                     return
-
-            except Exception as e:
-                self.log.exception("Exception occurred while checking for query completion")
-                yield TriggerEvent({"status": "error", "message": str(e)})
+                else:
+                    self.log.info(
+                        "Bigquery job status is %s. Sleeping for %s seconds.",
+                        job_status["status"],
+                        self.poll_interval,
+                    )
+                    await asyncio.sleep(self.poll_interval)
+        except Exception as e:
+            self.log.exception("Exception occurred while checking for query completion")
+            yield TriggerEvent({"status": "error", "message": str(e)})
 
     def _get_async_hook(self) -> BigQueryAsyncHook:
         return BigQueryAsyncHook(gcp_conn_id=self.conn_id)
 
 
 class BigQueryCheckTrigger(BigQueryInsertJobTrigger):
-    """BigQueryCheckTrigger run on the trigger worker"""
+    """BigQueryCheckTrigger run on the trigger worker."""
 
     def serialize(self) -> tuple[str, dict[str, Any]]:
         """Serializes BigQueryCheckTrigger arguments and classpath."""
@@ -122,50 +121,64 @@ class BigQueryCheckTrigger(BigQueryInsertJobTrigger):
             },
         )
 
-    async def run(self) -> AsyncIterator["TriggerEvent"]:  # type: ignore[override]
-        """Gets current job execution status and yields a TriggerEvent"""
+    async def run(self) -> AsyncIterator[TriggerEvent]:  # type: ignore[override]
+        """Gets current job execution status and yields a TriggerEvent."""
         hook = self._get_async_hook()
-        while True:
-            try:
+        try:
+            while True:
                 # Poll for job execution status
-                response_from_hook = await hook.get_job_status(job_id=self.job_id, project_id=self.project_id)
-                if response_from_hook == "success":
+                job_status = await hook.get_job_status(job_id=self.job_id, project_id=self.project_id)
+                if job_status["status"] == "success":
                     query_results = await hook.get_job_output(job_id=self.job_id, project_id=self.project_id)
-
                     records = hook.get_records(query_results)
 
                     # If empty list, then no records are available
                     if not records:
                         yield TriggerEvent(
                             {
-                                "status": "success",
+                                "status": job_status["status"],
+                                "message": job_status["message"],
                                 "records": None,
                             }
                         )
+                        return
                     else:
                         # Extract only first record from the query results
                         first_record = records.pop(0)
                         yield TriggerEvent(
                             {
-                                "status": "success",
+                                "status": job_status["status"],
+                                "message": job_status["message"],
                                 "records": first_record,
                             }
                         )
+                        return
+                elif job_status["status"] == "error":
+                    yield TriggerEvent({"status": "error", "message": job_status["message"]})
                     return
-
-                elif response_from_hook == "pending":
-                    self.log.info("Query is still running...")
-                    self.log.info("Sleeping for %s seconds.", self.poll_interval)
-                    await asyncio.sleep(self.poll_interval)
                 else:
-                    yield TriggerEvent({"status": "error", "message": response_from_hook})
-            except Exception as e:
-                self.log.exception("Exception occurred while checking for query completion")
-                yield TriggerEvent({"status": "error", "message": str(e)})
+                    self.log.info(
+                        "Bigquery job status is %s. Sleeping for %s seconds.",
+                        job_status["status"],
+                        self.poll_interval,
+                    )
+                    await asyncio.sleep(self.poll_interval)
+        except Exception as e:
+            self.log.exception("Exception occurred while checking for query completion")
+            yield TriggerEvent({"status": "error", "message": str(e)})
 
 
 class BigQueryGetDataTrigger(BigQueryInsertJobTrigger):
-    """BigQueryGetDataTrigger run on the trigger worker, inherits from BigQueryInsertJobTrigger class"""
+    """
+    BigQueryGetDataTrigger run on the trigger worker, inherits from BigQueryInsertJobTrigger class.
+
+    :param as_dict: if True returns the result as a list of dictionaries, otherwise as list of lists
+        (default: False).
+    """
+
+    def __init__(self, as_dict: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self.as_dict = as_dict
 
     def serialize(self) -> tuple[str, dict[str, Any]]:
         """Serializes BigQueryInsertJobTrigger arguments and classpath."""
@@ -178,44 +191,47 @@ class BigQueryGetDataTrigger(BigQueryInsertJobTrigger):
                 "project_id": self.project_id,
                 "table_id": self.table_id,
                 "poll_interval": self.poll_interval,
+                "as_dict": self.as_dict,
             },
         )
 
-    async def run(self) -> AsyncIterator["TriggerEvent"]:  # type: ignore[override]
-        """Gets current job execution status and yields a TriggerEvent with response data"""
+    async def run(self) -> AsyncIterator[TriggerEvent]:  # type: ignore[override]
+        """Gets current job execution status and yields a TriggerEvent with response data."""
         hook = self._get_async_hook()
-        while True:
-            try:
+        try:
+            while True:
                 # Poll for job execution status
-                response_from_hook = await hook.get_job_status(job_id=self.job_id, project_id=self.project_id)
-                if response_from_hook == "success":
+                job_status = await hook.get_job_status(job_id=self.job_id, project_id=self.project_id)
+                if job_status["status"] == "success":
                     query_results = await hook.get_job_output(job_id=self.job_id, project_id=self.project_id)
-                    records = hook.get_records(query_results)
-                    self.log.debug("Response from hook: %s", response_from_hook)
+                    records = hook.get_records(query_results=query_results, as_dict=self.as_dict)
+                    self.log.debug("Response from hook: %s", job_status["status"])
                     yield TriggerEvent(
                         {
                             "status": "success",
-                            "message": response_from_hook,
+                            "message": job_status["message"],
                             "records": records,
                         }
                     )
                     return
-                elif response_from_hook == "pending":
-                    self.log.info("Query is still running...")
-                    self.log.info("Sleeping for %s seconds.", self.poll_interval)
-                    await asyncio.sleep(self.poll_interval)
-                else:
-                    yield TriggerEvent({"status": "error", "message": response_from_hook})
+                elif job_status["status"] == "error":
+                    yield TriggerEvent(job_status)
                     return
-            except Exception as e:
-                self.log.exception("Exception occurred while checking for query completion")
-                yield TriggerEvent({"status": "error", "message": str(e)})
-                return
+                else:
+                    self.log.info(
+                        "Bigquery job status is %s. Sleeping for %s seconds.",
+                        job_status["status"],
+                        self.poll_interval,
+                    )
+                    await asyncio.sleep(self.poll_interval)
+        except Exception as e:
+            self.log.exception("Exception occurred while checking for query completion")
+            yield TriggerEvent({"status": "error", "message": str(e)})
 
 
 class BigQueryIntervalCheckTrigger(BigQueryInsertJobTrigger):
     """
-    BigQueryIntervalCheckTrigger run on the trigger worker, inherits from BigQueryInsertJobTrigger class
+    BigQueryIntervalCheckTrigger run on the trigger worker, inherits from BigQueryInsertJobTrigger class.
 
     :param conn_id: Reference to google cloud connection id
     :param first_job_id:  The ID of the job 1 performed
@@ -286,11 +302,11 @@ class BigQueryIntervalCheckTrigger(BigQueryInsertJobTrigger):
             },
         )
 
-    async def run(self) -> AsyncIterator["TriggerEvent"]:  # type: ignore[override]
-        """Gets current job execution status and yields a TriggerEvent"""
+    async def run(self) -> AsyncIterator[TriggerEvent]:  # type: ignore[override]
+        """Gets current job execution status and yields a TriggerEvent."""
         hook = self._get_async_hook()
-        while True:
-            try:
+        try:
+            while True:
                 first_job_response_from_hook = await hook.get_job_status(
                     job_id=self.first_job_id, project_id=self.project_id
                 )
@@ -298,7 +314,10 @@ class BigQueryIntervalCheckTrigger(BigQueryInsertJobTrigger):
                     job_id=self.second_job_id, project_id=self.project_id
                 )
 
-                if first_job_response_from_hook == "success" and second_job_response_from_hook == "success":
+                if (
+                    first_job_response_from_hook["status"] == "success"
+                    and second_job_response_from_hook["status"] == "success"
+                ):
                     first_query_results = await hook.get_job_output(
                         job_id=self.first_job_id, project_id=self.project_id
                     )
@@ -342,25 +361,27 @@ class BigQueryIntervalCheckTrigger(BigQueryInsertJobTrigger):
                         }
                     )
                     return
-                elif first_job_response_from_hook == "pending" or second_job_response_from_hook == "pending":
+                elif (
+                    first_job_response_from_hook["status"] == "pending"
+                    or second_job_response_from_hook["status"] == "pending"
+                ):
                     self.log.info("Query is still running...")
                     self.log.info("Sleeping for %s seconds.", self.poll_interval)
                     await asyncio.sleep(self.poll_interval)
                 else:
                     yield TriggerEvent(
-                        {"status": "error", "message": second_job_response_from_hook, "data": None}
+                        {"status": "error", "message": second_job_response_from_hook["message"], "data": None}
                     )
                     return
 
-            except Exception as e:
-                self.log.exception("Exception occurred while checking for query completion")
-                yield TriggerEvent({"status": "error", "message": str(e)})
-                return
+        except Exception as e:
+            self.log.exception("Exception occurred while checking for query completion")
+            yield TriggerEvent({"status": "error", "message": str(e)})
 
 
 class BigQueryValueCheckTrigger(BigQueryInsertJobTrigger):
     """
-    BigQueryValueCheckTrigger run on the trigger worker, inherits from BigQueryInsertJobTrigger class
+    BigQueryValueCheckTrigger run on the trigger worker, inherits from BigQueryInsertJobTrigger class.
 
     :param conn_id: Reference to google cloud connection id
     :param sql: the sql to be executed
@@ -414,37 +435,37 @@ class BigQueryValueCheckTrigger(BigQueryInsertJobTrigger):
             },
         )
 
-    async def run(self) -> AsyncIterator["TriggerEvent"]:  # type: ignore[override]
-        """Gets current job execution status and yields a TriggerEvent"""
+    async def run(self) -> AsyncIterator[TriggerEvent]:  # type: ignore[override]
+        """Gets current job execution status and yields a TriggerEvent."""
         hook = self._get_async_hook()
-        while True:
-            try:
+        try:
+            while True:
                 # Poll for job execution status
                 response_from_hook = await hook.get_job_status(job_id=self.job_id, project_id=self.project_id)
-                if response_from_hook == "success":
+                if response_from_hook["status"] == "success":
                     query_results = await hook.get_job_output(job_id=self.job_id, project_id=self.project_id)
                     records = hook.get_records(query_results)
                     records = records.pop(0) if records else None
                     hook.value_check(self.sql, self.pass_value, records, self.tolerance)
                     yield TriggerEvent({"status": "success", "message": "Job completed", "records": records})
                     return
-                elif response_from_hook == "pending":
+                elif response_from_hook["status"] == "pending":
                     self.log.info("Query is still running...")
                     self.log.info("Sleeping for %s seconds.", self.poll_interval)
                     await asyncio.sleep(self.poll_interval)
                 else:
-                    yield TriggerEvent({"status": "error", "message": response_from_hook, "records": None})
+                    yield TriggerEvent(
+                        {"status": "error", "message": response_from_hook["message"], "records": None}
+                    )
                     return
-
-            except Exception as e:
-                self.log.exception("Exception occurred while checking for query completion")
-                yield TriggerEvent({"status": "error", "message": str(e)})
-                return
+        except Exception as e:
+            self.log.exception("Exception occurred while checking for query completion")
+            yield TriggerEvent({"status": "error", "message": str(e)})
 
 
 class BigQueryTableExistenceTrigger(BaseTrigger):
     """
-    Initialize the BigQuery Table Existence Trigger with needed parameters
+    Initialize the BigQuery Table Existence Trigger with needed parameters.
 
     :param project_id: Google Cloud Project where the job is running
     :param dataset_id: The dataset ID of the requested table.
@@ -487,10 +508,10 @@ class BigQueryTableExistenceTrigger(BaseTrigger):
     def _get_async_hook(self) -> BigQueryTableAsyncHook:
         return BigQueryTableAsyncHook(gcp_conn_id=self.gcp_conn_id)
 
-    async def run(self) -> AsyncIterator["TriggerEvent"]:  # type: ignore[override]
+    async def run(self) -> AsyncIterator[TriggerEvent]:  # type: ignore[override]
         """Will run until the table exists in the Google Big Query."""
-        while True:
-            try:
+        try:
+            while True:
                 hook = self._get_async_hook()
                 response = await self._table_exists(
                     hook=hook, dataset=self.dataset_id, table_id=self.table_id, project_id=self.project_id
@@ -499,17 +520,15 @@ class BigQueryTableExistenceTrigger(BaseTrigger):
                     yield TriggerEvent({"status": "success", "message": "success"})
                     return
                 await asyncio.sleep(self.poll_interval)
-            except Exception as e:
-                self.log.exception("Exception occurred while checking for Table existence")
-                yield TriggerEvent({"status": "error", "message": str(e)})
-                return
+        except Exception as e:
+            self.log.exception("Exception occurred while checking for Table existence")
+            yield TriggerEvent({"status": "error", "message": str(e)})
 
     async def _table_exists(
         self, hook: BigQueryTableAsyncHook, dataset: str, table_id: str, project_id: str
     ) -> bool:
         """
-        Create client session and make call to BigQueryTableAsyncHook and check for the table in
-        Google Big Query.
+        Create session, make call to BigQueryTableAsyncHook, and check for the table in Google Big Query.
 
         :param hook: BigQueryTableAsyncHook Hook class
         :param dataset:  The name of the dataset in which to look for the table storage bucket.
@@ -524,8 +543,79 @@ class BigQueryTableExistenceTrigger(BaseTrigger):
                     dataset=dataset, table_id=table_id, project_id=project_id, session=session
                 )
                 response = await client.get()
-                return True if response else False
+                return bool(response)
             except ClientResponseError as err:
                 if err.status == 404:
                     return False
                 raise err
+
+
+class BigQueryTablePartitionExistenceTrigger(BigQueryTableExistenceTrigger):
+    """
+    Initialize the BigQuery Table Partition Existence Trigger with needed parameters.
+
+    :param partition_id: The name of the partition to check the existence of.
+    :param project_id: Google Cloud Project where the job is running
+    :param dataset_id: The dataset ID of the requested table.
+    :param table_id: The table ID of the requested table.
+    :param gcp_conn_id: Reference to google cloud connection id
+    :param hook_params: params for hook
+    :param poll_interval: polling period in seconds to check for the status
+    """
+
+    def __init__(self, partition_id: str, **kwargs):
+        super().__init__(**kwargs)
+        self.partition_id = partition_id
+
+    def serialize(self) -> tuple[str, dict[str, Any]]:
+        """Serializes BigQueryTablePartitionExistenceTrigger arguments and classpath."""
+        return (
+            "airflow.providers.google.cloud.triggers.bigquery.BigQueryTablePartitionExistenceTrigger",
+            {
+                "partition_id": self.partition_id,
+                "dataset_id": self.dataset_id,
+                "project_id": self.project_id,
+                "table_id": self.table_id,
+                "gcp_conn_id": self.gcp_conn_id,
+                "poll_interval": self.poll_interval,
+                "hook_params": self.hook_params,
+            },
+        )
+
+    async def run(self) -> AsyncIterator[TriggerEvent]:  # type: ignore[override]
+        """Will run until the table exists in the Google Big Query."""
+        hook = BigQueryAsyncHook(gcp_conn_id=self.gcp_conn_id)
+        job_id = None
+        while True:
+            if job_id is not None:
+                job_status = await hook.get_job_status(job_id=job_id, project_id=self.project_id)
+                if job_status["status"] == "success":
+                    is_partition = await self._partition_exists(
+                        hook=hook, job_id=job_id, project_id=self.project_id
+                    )
+                    if is_partition:
+                        yield TriggerEvent(
+                            {
+                                "status": "success",
+                                "message": f"Partition: {self.partition_id} in table: {self.table_id}",
+                            }
+                        )
+                        return
+                    job_id = None
+                elif job_status["status"] == "error":
+                    yield TriggerEvent(job_status)
+                    return
+                self.log.info("Sleeping for %s seconds.", self.poll_interval)
+                await asyncio.sleep(self.poll_interval)
+
+            else:
+                job_id = await hook.create_job_for_partition_get(self.dataset_id, project_id=self.project_id)
+                self.log.info("Sleeping for %s seconds.", self.poll_interval)
+                await asyncio.sleep(self.poll_interval)
+
+    async def _partition_exists(self, hook: BigQueryAsyncHook, job_id: str | None, project_id: str):
+        query_results = await hook.get_job_output(job_id=job_id, project_id=project_id)
+        records = hook.get_records(query_results)
+        if records:
+            records = [row[0] for row in records]
+            return self.partition_id in records

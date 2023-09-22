@@ -42,13 +42,13 @@ Extra (optional)
 
     * ``queue`` - The name of the YARN queue to which the application is submitted.
     * ``deploy-mode`` - Whether to deploy your driver on the worker nodes (cluster) or locally as an external client (client).
-    * ``spark-binary`` - The command to use for Spark submit. Some distros may use ``spark2-submit``. Default ``spark-submit``. Only ``spark-submit`` and ``spark2-submit`` are allowed as value.
+    * ``spark-binary`` - The command to use for Spark submit. Some distros may use ``spark2-submit``. Default ``spark-submit``. Only ``spark-submit``, ``spark2-submit`` or ``spark3-submit`` are allowed as value.
     * ``namespace`` - Kubernetes namespace (``spark.kubernetes.namespace``) to divide cluster resources between multiple users (via resource quota).
 
 When specifying the connection in environment variable you should specify
 it using URI syntax.
 
-Note that all components of the URI should be URL-encoded. The URI and and the mongo
+Note that all components of the URI should be URL-encoded. The URI and the mongo
 connection string are not the same.
 
 For example:
@@ -56,3 +56,10 @@ For example:
 .. code-block:: bash
 
    export AIRFLOW_CONN_SPARK_DEFAULT='spark://mysparkcluster.com:80?deploy-mode=cluster&spark_binary=command&namespace=kube+namespace'
+
+.. warning::
+
+  Make sure you trust your users with the ability to configure the host settings as it may enable the connection to
+  establish communication with external servers. It's crucial to understand that directing the connection towards a
+  malicious server can lead to significant security vulnerabilities, including the risk of encountering
+  Remote Code Execution (RCE) attacks.

@@ -18,7 +18,7 @@
 """
 Hooks for Cloud Memorystore service.
 
-.. spelling::
+.. spelling:word-list::
 
     DataProtectionMode
     FieldMask
@@ -27,13 +27,11 @@ Hooks for Cloud Memorystore service.
 """
 from __future__ import annotations
 
-import warnings
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from google.api_core import path_template
 from google.api_core.exceptions import NotFound
 from google.api_core.gapic_v1.method import DEFAULT, _MethodDefault
-from google.api_core.retry import Retry
 from google.cloud.memcache_v1beta2 import CloudMemcacheClient
 from google.cloud.memcache_v1beta2.types import cloud_memcache
 from google.cloud.redis_v1 import (
@@ -43,11 +41,14 @@ from google.cloud.redis_v1 import (
     Instance,
     OutputConfig,
 )
-from google.protobuf.field_mask_pb2 import FieldMask
 
 from airflow import version
 from airflow.exceptions import AirflowException
 from airflow.providers.google.common.hooks.base_google import PROVIDE_PROJECT_ID, GoogleBaseHook
+
+if TYPE_CHECKING:
+    from google.api_core.retry import Retry
+    from google.protobuf.field_mask_pb2 import FieldMask
 
 
 class CloudMemorystoreHook(GoogleBaseHook):
@@ -58,9 +59,6 @@ class CloudMemorystoreHook(GoogleBaseHook):
     keyword arguments rather than positional.
 
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -74,16 +72,16 @@ class CloudMemorystoreHook(GoogleBaseHook):
     def __init__(
         self,
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
+        **kwargs,
     ) -> None:
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'impersonation_chain'", DeprecationWarning
+        if kwargs.get("delegate_to") is not None:
+            raise RuntimeError(
+                "The `delegate_to` parameter has been deprecated before and finally removed in this version"
+                " of Google Provider. You MUST convert it to `impersonate_chain`"
             )
         super().__init__(
             gcp_conn_id=gcp_conn_id,
-            delegate_to=delegate_to,
             impersonation_chain=impersonation_chain,
         )
         self._client: CloudRedisClient | None = None
@@ -499,9 +497,6 @@ class CloudMemorystoreMemcachedHook(GoogleBaseHook):
     keyword arguments rather than positional.
 
     :param gcp_conn_id: The connection ID to use when fetching connection info.
-    :param delegate_to: The account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param impersonation_chain: Optional service account to impersonate using short-term
         credentials, or chained list of accounts required to get the access_token
         of the last account in the list, which will be impersonated in the request.
@@ -515,12 +510,10 @@ class CloudMemorystoreMemcachedHook(GoogleBaseHook):
     def __init__(
         self,
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         impersonation_chain: str | Sequence[str] | None = None,
     ) -> None:
         super().__init__(
             gcp_conn_id=gcp_conn_id,
-            delegate_to=delegate_to,
             impersonation_chain=impersonation_chain,
         )
         self._client: CloudMemcacheClient | None = None

@@ -21,9 +21,9 @@ from unittest import mock
 from unittest.mock import PropertyMock
 
 import google
-from google.cloud.bigtable import Client
+import pytest
+from google.cloud.bigtable import Client, enums
 from google.cloud.bigtable.instance import Instance
-from google.cloud.bigtable_admin_v2 import enums
 
 from airflow.providers.google.cloud.hooks.bigtable import BigtableHook
 from airflow.providers.google.common.consts import CLIENT_INFO
@@ -50,6 +50,10 @@ CBT_REPLICATE_CLUSTERS = [
 
 
 class TestBigtableHookNoDefaultProjectId:
+    def test_delegate_to_runtime_error(self):
+        with pytest.raises(RuntimeError):
+            BigtableHook(gcp_conn_id="test", delegate_to="delegate_to")
+
     def setup_method(self):
         with mock.patch(
             "airflow.providers.google.common.hooks.base_google.GoogleBaseHook.__init__",
@@ -499,8 +503,9 @@ class TestBigtableHookDefaultProjectId:
         create.assert_called_once_with([], {})
 
     @mock.patch("google.cloud.bigtable.cluster.Cluster.update")
+    @mock.patch("google.cloud.bigtable.cluster.Cluster.reload")
     @mock.patch("airflow.providers.google.cloud.hooks.bigtable.BigtableHook._get_client")
-    def test_update_cluster(self, get_client, update):
+    def test_update_cluster(self, get_client, reload, update):
         instance_method = get_client.return_value.instance
         instance_exists_method = instance_method.return_value.exists
         instance_exists_method.return_value = True
@@ -510,6 +515,7 @@ class TestBigtableHookDefaultProjectId:
             instance=instance, cluster_id=CBT_CLUSTER, nodes=4
         )
         get_client.assert_not_called()
+        reload.assert_called_once_with()
         update.assert_called_once_with()
 
     @mock.patch("google.cloud.bigtable.table.Table.list_column_families")

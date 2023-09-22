@@ -28,16 +28,105 @@ For high-level changelog, see :doc:`package information including changelog <ind
 
 
 
+5.0.2
+.....
+
+Latest change: 2023-09-07
+
+=================================================================================================  ===========  ===================================================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ===================================================================================================
+`f7f3b675ec <https://github.com/apache/airflow/commit/f7f3b675ecd40e32e458b71b5066864f866a60c8>`_  2023-09-07   ``Make sure that only valid elasticsearch keys are passed to handler (#34119)``
+`55976af32e <https://github.com/apache/airflow/commit/55976af32ea7d09831e2bcd21c0f3814d9b0eb3f>`_  2023-08-31   ``Replace sequence concatination by unpacking in Airflow providers (#33933)``
+`9d8c77e447 <https://github.com/apache/airflow/commit/9d8c77e447f5515b9a6aa85fa72511a86a128c28>`_  2023-08-27   ``Improve modules import in Airflow providers by some of them into a type-checking block (#33754)``
+`b11525702c <https://github.com/apache/airflow/commit/b11525702c72cb53034aa29ccd6d0e1161ac475c>`_  2023-08-26   ``Use literal dict instead of calling dict() in providers (#33761)``
+`353b1482d3 <https://github.com/apache/airflow/commit/353b1482d3720c7e962022f25c7e5d3e105ed4f0>`_  2023-08-26   ``remove unnecessary and rewrite it using list in providers (#33763)``
+`c90eec9365 <https://github.com/apache/airflow/commit/c90eec936583d482a35f0dc8bfc13afc58a9c322>`_  2023-08-26   ``Use f-string instead of  in Airflow providers (#33752)``
+=================================================================================================  ===========  ===================================================================================================
+
+5.0.1
+.....
+
+Latest change: 2023-08-26
+
+=================================================================================================  ===========  =============================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  =============================================================
+`c077d19060 <https://github.com/apache/airflow/commit/c077d190609f931387c1fcd7b8cc34f12e2372b9>`_  2023-08-26   ``Prepare docs for Aug 2023 3rd wave of Providers (#33730)``
+`94f70d8184 <https://github.com/apache/airflow/commit/94f70d818482de7defa03c0aff3c213ca6b83e9e>`_  2023-08-23   ``Replace strftime with f-strings where nicer (#33455)``
+`7e79997594 <https://github.com/apache/airflow/commit/7e799975948573ca2a1c4b2051d3eadc32bb8ba7>`_  2023-08-11   ``D205 Support - Providers - Final Pass (#33303)``
+`dd73a0bffa <https://github.com/apache/airflow/commit/dd73a0bffa6c4de93a2dd8dc4460b64aedc51255>`_  2023-08-10   ``Fix urlparse schemaless-behaviour on Python 3.9+ (#33289)``
+`3c61ca40d7 <https://github.com/apache/airflow/commit/3c61ca40d7dfea4bb51d17704f9da88d7edd08c4>`_  2023-08-10   ``Add backward compatibility for elasticsearch<8 (#33281)``
+`ad9d8d46b6 <https://github.com/apache/airflow/commit/ad9d8d46b6ee3a7d8e6665d2a6f5c6660063f281>`_  2023-08-08   ``Upgrade Elasticsearch to 8 (#33135)``
+=================================================================================================  ===========  =============================================================
+
+5.0.0
+.....
+
+Latest change: 2023-07-17
+
+=================================================================================================  ===========  ================================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ================================================================================
+`4a44343731 <https://github.com/apache/airflow/commit/4a44343731144a7a7dc7fff7e3ed01663d4dd2e1>`_  2023-07-17   ``Prepare RC3 for elasticsearch provider release (#32636)``
+`acd51647a4 <https://github.com/apache/airflow/commit/acd51647a4f5a37c47af05d27e9783f95bcf3db3>`_  2023-07-15   ``Fix unsound type hint in ElasticsearchTaskHandler.es_read (#32509)``
+`41e611929e <https://github.com/apache/airflow/commit/41e611929eadcbbc746d956647967c82f40fae4a>`_  2023-07-15   ``Fix Failing ES Remote Logging (#32438)``
+`e01323635a <https://github.com/apache/airflow/commit/e01323635a88ecf313a415ea41d32d6d28fa0794>`_  2023-07-13   ``Add deprecation info to the providers modules and classes docstring (#32536)``
+`225e3041d2 <https://github.com/apache/airflow/commit/225e3041d269698d0456e09586924c1898d09434>`_  2023-07-06   ``Prepare docs for July 2023 wave of Providers (RC2) (#32381)``
+`3878fe6fab <https://github.com/apache/airflow/commit/3878fe6fab3ccc1461932b456c48996f2763139f>`_  2023-07-05   ``Remove spurious headers for provider changelogs (#32373)``
+`cb4927a018 <https://github.com/apache/airflow/commit/cb4927a01887e2413c45d8d9cb63e74aa994ee74>`_  2023-07-05   ``Prepare docs for July 2023 wave of Providers (#32298)``
+`d1aa509bbd <https://github.com/apache/airflow/commit/d1aa509bbd1941ceb3fe31789efeebbddd58d32f>`_  2023-06-28   ``D205 Support - Providers: Databricks to Github (inclusive) (#32243)``
+`09d4718d3a <https://github.com/apache/airflow/commit/09d4718d3a46aecf3355d14d3d23022002f4a818>`_  2023-06-27   ``Improve provider documentation and README structure (#32125)``
+`b28c90354f <https://github.com/apache/airflow/commit/b28c90354f110bd598ddce193cf82cb1416adbc8>`_  2023-06-24   ``Deprecate the 2 non-official elasticsearch libraries (#31920)``
+=================================================================================================  ===========  ================================================================================
+
+4.5.1
+.....
+
+Latest change: 2023-06-20
+
+=================================================================================================  ===========  =============================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  =============================================================
+`79bcc2e668 <https://github.com/apache/airflow/commit/79bcc2e668e648098aad6eaa87fe8823c76bc69a>`_  2023-06-20   ``Prepare RC1 docs for June 2023 wave of Providers (#32001)``
+`8b146152d6 <https://github.com/apache/airflow/commit/8b146152d62118defb3004c997c89c99348ef948>`_  2023-06-20   ``Add note about dropping Python 3.7 for providers (#32015)``
+`9276310a43 <https://github.com/apache/airflow/commit/9276310a43d17a9e9e38c2cb83686a15656896b2>`_  2023-06-05   ``Improve docstrings in providers (#31681)``
+`a59076eaee <https://github.com/apache/airflow/commit/a59076eaeed03dd46e749ad58160193b4ef3660c>`_  2023-06-02   ``Add D400 pydocstyle check - Providers (#31427)``
+`9fa75aaf7a <https://github.com/apache/airflow/commit/9fa75aaf7a391ebf0e6b6949445c060f6de2ceb9>`_  2023-05-29   ``Remove Python 3.7 support (#30963)``
+=================================================================================================  ===========  =============================================================
+
+4.5.0
+.....
+
+Latest change: 2023-05-19
+
+=================================================================================================  ===========  ======================================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ======================================================================================
+`45548b9451 <https://github.com/apache/airflow/commit/45548b9451fba4e48c6f0c0ba6050482c2ea2956>`_  2023-05-19   ``Prepare RC2 docs for May 2023 wave of Providers (#31416)``
+`abea189022 <https://github.com/apache/airflow/commit/abea18902257c0250fedb764edda462f9e5abc84>`_  2023-05-18   ``Use '__version__' in providers not 'version' (#31393)``
+`f5aed58d9f <https://github.com/apache/airflow/commit/f5aed58d9fb2137fa5f0e3ce75b6709bf8393a94>`_  2023-05-18   ``Fixing circular import error in providers caused by airflow version check (#31379)``
+`d9ff55cf6d <https://github.com/apache/airflow/commit/d9ff55cf6d95bb342fed7a87613db7b9e7c8dd0f>`_  2023-05-16   ``Prepare docs for May 2023 wave of Providers (#31252)``
+`761c0da723 <https://github.com/apache/airflow/commit/761c0da723799c3c37d9eb2cadaa9c4fa256d13a>`_  2023-05-12   ``Upper-bind elasticearch integration (#31255)``
+`0a30706aa7 <https://github.com/apache/airflow/commit/0a30706aa7c581905ca99a8b6e2f05960d480729>`_  2023-05-03   ``Use 'AirflowProviderDeprecationWarning' in providers (#30975)``
+`eef5bc7f16 <https://github.com/apache/airflow/commit/eef5bc7f166dc357fea0cc592d39714b1a5e3c14>`_  2023-05-03   ``Add full automation for min Airflow version for providers (#30994)``
+`a7eb32a5b2 <https://github.com/apache/airflow/commit/a7eb32a5b222e236454d3e474eec478ded7c368d>`_  2023-04-30   ``Bump minimum Airflow version in providers (#30917)``
+`d23a3bbed8 <https://github.com/apache/airflow/commit/d23a3bbed89ae04369983f21455bf85ccc1ae1cb>`_  2023-04-04   ``Add mechanism to suspend providers (#30422)``
+`f9e9d23457 <https://github.com/apache/airflow/commit/f9e9d23457cba5d3e18b5bdb7b65ecc63735b65b>`_  2023-02-11   ``Restore trigger logging (#29482)``
+`60d4bcd1d1 <https://github.com/apache/airflow/commit/60d4bcd1d101bb56955081d14e3e138a0c960c5f>`_  2023-02-10   ``Revert "Enable individual trigger logging (#27758)" (#29472)``
+=================================================================================================  ===========  ======================================================================================
+
 4.4.0
 .....
 
-Latest change: 2023-02-03
+Latest change: 2023-02-08
 
-=================================================================================================  ===========  ==============================================
+=================================================================================================  ===========  ========================================================
 Commit                                                                                             Committed    Subject
-=================================================================================================  ===========  ==============================================
+=================================================================================================  ===========  ========================================================
+`ce6ae2457e <https://github.com/apache/airflow/commit/ce6ae2457ef3d9f44f0086b58026909170bbf22a>`_  2023-02-08   ``Prepare docs for Feb 2023 wave of Providers (#29379)``
 `1b18a501fe <https://github.com/apache/airflow/commit/1b18a501fe818079e535838fa4f232b03365fc75>`_  2023-02-03   ``Enable individual trigger logging (#27758)``
-=================================================================================================  ===========  ==============================================
+=================================================================================================  ===========  ========================================================
 
 4.3.3
 .....

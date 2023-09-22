@@ -17,9 +17,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 import boto3
-from botocore.client import BaseClient
 
 from airflow import DAG
 from airflow.decorators import task
@@ -35,6 +35,9 @@ from airflow.providers.amazon.aws.sensors.glue import GlueJobSensor
 from airflow.providers.amazon.aws.sensors.glue_crawler import GlueCrawlerSensor
 from airflow.utils.trigger_rule import TriggerRule
 from tests.system.providers.amazon.aws.utils import ENV_ID_KEY, SystemTestContextBuilder, prune_logs
+
+if TYPE_CHECKING:
+    from botocore.client import BaseClient
 
 DAG_ID = "example_glue"
 
@@ -162,9 +165,10 @@ with DAG(
         job_name=glue_job_name,
         # Job ID extracted from previous Glue Job Operator task
         run_id=submit_glue_job.output,
+        verbose=True,  # prints glue job logs in airflow logs
     )
     # [END howto_sensor_glue]
-    wait_for_job.poke_interval = 10
+    wait_for_job.poke_interval = 5
 
     delete_bucket = S3DeleteBucketOperator(
         task_id="delete_bucket",

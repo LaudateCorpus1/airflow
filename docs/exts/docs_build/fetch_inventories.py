@@ -19,11 +19,11 @@ from __future__ import annotations
 import concurrent
 import concurrent.futures
 import datetime
+import itertools
 import os
 import shutil
 import sys
 import traceback
-from itertools import repeat
 from tempfile import NamedTemporaryFile
 from typing import Iterator
 
@@ -43,7 +43,7 @@ CACHE_DIR = os.path.join(DOCS_DIR, "_inventory_cache")
 EXPIRATION_DATE_PATH = os.path.join(DOCS_DIR, "_inventory_cache", "expiration-date")
 
 S3_DOC_URL = "http://apache-airflow-docs.s3-website.eu-central-1.amazonaws.com"
-S3_DOC_URL_VERSIONED = S3_DOC_URL + "/docs/{package_name}/latest/objects.inv"
+S3_DOC_URL_VERSIONED = S3_DOC_URL + "/docs/{package_name}/stable/objects.inv"
 S3_DOC_URL_NON_VERSIONED = S3_DOC_URL + "/docs/{package_name}/objects.inv"
 
 
@@ -142,7 +142,7 @@ def fetch_inventories():
     with requests.Session() as session, concurrent.futures.ThreadPoolExecutor(DEFAULT_POOLSIZE) as pool:
         download_results: Iterator[tuple[str, bool]] = pool.map(
             _fetch_file,
-            repeat(session, len(to_download)),
+            itertools.repeat(session, len(to_download)),
             (pkg_name for pkg_name, _, _ in to_download),
             (url for _, url, _ in to_download),
             (path for _, _, path in to_download),
@@ -151,10 +151,17 @@ def fetch_inventories():
     failed, success = list(failed), list(success)
     print(f"Result: {len(success)} success, {len(failed)} failed")
     if failed:
+        terminate = False
         print("Failed packages:")
         for pkg_no, (pkg_name, _) in enumerate(failed, start=1):
             print(f"{pkg_no}. {pkg_name}")
-        print("Terminate execution.")
-        raise SystemExit(1)
+            if not terminate and not pkg_name.startswith("apache-airflow"):
+                # For solve situation that newly created Community Provider doesn't upload inventory yet.
+                # And we terminate execution only if any error happen during fetching
+                # third party intersphinx inventories.
+                terminate = True
+        if terminate:
+            print("Terminate execution.")
+            raise SystemExit(1)
 
     return [pkg_name for pkg_name, status in failed]

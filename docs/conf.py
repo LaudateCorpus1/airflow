@@ -33,15 +33,17 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 import yaml
+from packaging.version import Version, parse as parse_version
 
 import airflow
-from airflow.configuration import AirflowConfigParser, default_config_yaml
+from airflow.configuration import AirflowConfigParser, retrieve_configuration_description
 
 sys.path.append(str(Path(__file__).parent / "exts"))
 
@@ -50,7 +52,6 @@ from docs_build.third_party_inventories import THIRD_PARTY_INDEXES  # noqa: E402
 CONF_DIR = pathlib.Path(__file__).parent.absolute()
 INVENTORY_CACHE_DIR = CONF_DIR / "_inventory_cache"
 ROOT_DIR = CONF_DIR.parent
-FOR_PRODUCTION = os.environ.get("AIRFLOW_FOR_PRODUCTION", "false") == "true"
 
 # By default (e.g. on RTD), build docs for `airflow` package
 PACKAGE_NAME = os.environ.get("AIRFLOW_PACKAGE_NAME", "apache-airflow")
@@ -188,6 +189,8 @@ if PACKAGE_NAME == "apache-airflow":
     exclude_patterns = [
         # We only link to selected subpackages.
         "_api/airflow/index.rst",
+        # Included in the cluster-policies doc
+        "_api/airflow/policies/index.rst",
         "README.rst",
     ]
 elif PACKAGE_NAME.startswith("apache-airflow-providers-"):
@@ -217,13 +220,14 @@ def _get_rst_filepath_from_path(filepath: pathlib.Path):
 if PACKAGE_NAME == "apache-airflow":
     # Exclude top-level packages
     # do not exclude these top-level modules from the doc build:
-    _allowed_top_level = ("exceptions.py",)
+    _allowed_top_level = ("exceptions.py", "policies.py")
 
     browsable_packages = {
         "hooks",
         "decorators",
         "example_dags",
         "executors",
+        "models",
         "operators",
         "providers",
         "secrets",
@@ -232,7 +236,21 @@ if PACKAGE_NAME == "apache-airflow":
         "triggers",
         "utils",
     }
-    browsable_utils: set[str] = set()
+    browsable_utils: set[str] = {
+        "state.py",
+    }
+
+    models_included: set[str] = {
+        "baseoperator.py",
+        "connection.py",
+        "dag.py",
+        "dagbag.py",
+        "param.py",
+        "taskinstance.py",
+        "taskinstancekey.py",
+        "variable.py",
+        "xcom.py",
+    }
 
     root = ROOT_DIR / "airflow"
     for path in root.iterdir():
@@ -241,13 +259,19 @@ if PACKAGE_NAME == "apache-airflow":
         if path.is_dir() and path.name not in browsable_packages:
             exclude_patterns.append(f"_api/airflow/{path.name}")
 
-    # Don't include all of utils, just the specific ones we decoded to include
+    # Don't include all of utils, just the specific ones we decided to include
     for path in (root / "utils").iterdir():
         if path.name not in browsable_utils:
             exclude_patterns.append(_get_rst_filepath_from_path(path))
+
+    for path in (root / "models").iterdir():
+        if path.name not in models_included:
+            exclude_patterns.append(_get_rst_filepath_from_path(path))
+
+
 elif PACKAGE_NAME != "docker-stack":
     exclude_patterns.extend(
-        _get_rst_filepath_from_path(f) for f in pathlib.Path(PACKAGE_DIR).glob("**/example_dags")
+        _get_rst_filepath_from_path(f) for f in pathlib.Path(PACKAGE_DIR).rglob("example_dags")
     )
 
 # Add any paths that contain templates here, relative to this directory.
@@ -320,7 +344,7 @@ html_sidebars = {
         "searchbox.html",
         "globaltoc.html",
     ]
-    if FOR_PRODUCTION and PACKAGE_VERSION != "devel"
+    if PACKAGE_VERSION != "devel"
     else [
         "searchbox.html",
         "globaltoc.html",
@@ -333,23 +357,17 @@ html_use_index = True
 # If true, "(C) Copyright ..." is shown in the HTML footer. Default is True.
 html_show_copyright = False
 
-# Theme configuration
-if PACKAGE_NAME.startswith("apache-airflow-providers-"):
-    # Only hide hidden items for providers. For Chart and Airflow we are using the approach where
-    # TOC is hidden but sidebar still shows the content (but we are not doing it for providers).
-    html_theme_options: dict[str, Any] = {"hide_website_buttons": True, "sidebar_includehidden": False}
-else:
-    html_theme_options = {"hide_website_buttons": True, "sidebar_includehidden": True}
-if FOR_PRODUCTION:
-    html_theme_options["navbar_links"] = [
-        {"href": "/community/", "text": "Community"},
-        {"href": "/meetups/", "text": "Meetups"},
-        {"href": "/docs/", "text": "Documentation"},
-        {"href": "/use-cases/", "text": "Use-cases"},
-        {"href": "/announcements/", "text": "Announcements"},
-        {"href": "/blog/", "text": "Blog"},
-        {"href": "/ecosystem/", "text": "Ecosystem"},
-    ]
+html_theme_options: dict[str, Any] = {"hide_website_buttons": True, "sidebar_includehidden": True}
+
+html_theme_options["navbar_links"] = [
+    {"href": "/community/", "text": "Community"},
+    {"href": "/meetups/", "text": "Meetups"},
+    {"href": "/docs/", "text": "Documentation"},
+    {"href": "/use-cases/", "text": "Use-cases"},
+    {"href": "/announcements/", "text": "Announcements"},
+    {"href": "/blog/", "text": "Blog"},
+    {"href": "/ecosystem/", "text": "Ecosystem"},
+]
 
 # A dictionary of values to pass into the template engine's context for all pages.
 html_context = {
@@ -384,40 +402,64 @@ html_context = {
 # -- Options for sphinx_jinja ------------------------------------------
 # See: https://github.com/tardyp/sphinx-jinja
 
-# Jinja context
-if PACKAGE_NAME == "apache-airflow":
+airflow_version = parse_version(
+    re.search(  # type: ignore[union-attr,arg-type]
+        r"__version__ = \"([0-9\.]*)(\.dev[0-9]*)?\"",
+        (Path(__file__).parents[1] / "airflow" / "__init__.py").read_text(),
+    ).groups(0)[0]
+)
+
+
+def get_configs_and_deprecations(
+    package_name: str,
+    package_version: Version,
+) -> tuple[dict[str, dict[str, tuple[str, str, str]]], dict[str, dict[str, tuple[str, str, str]]]]:
     deprecated_options: dict[str, dict[str, tuple[str, str, str]]] = defaultdict(dict)
     for (section, key), (
         (deprecated_section, deprecated_key, since_version)
     ) in AirflowConfigParser.deprecated_options.items():
         deprecated_options[deprecated_section][deprecated_key] = section, key, since_version
 
-    configs = default_config_yaml()
+    for (section, key), deprecated in AirflowConfigParser.many_to_one_deprecated_options.items():
+        for deprecated_section, deprecated_key, since_version in deprecated:
+            deprecated_options[deprecated_section][deprecated_key] = section, key, since_version
+
+    if package_name == "apache-airflow":
+        configs = retrieve_configuration_description(include_providers=False)
+    else:
+        configs = retrieve_configuration_description(
+            include_airflow=False, include_providers=True, selected_provider=package_name
+        )
 
     # We want the default/example we show in the docs to reflect the value _after_
     # the config has been templated, not before
     # e.g. {{dag_id}} in default_config.cfg -> {dag_id} in airflow.cfg, and what we want in docs
     keys_to_format = ["default", "example"]
     for conf_name, conf_section in configs.items():
-        for option_name, option in conf_section["options"].items():
+        for option_name, option in list(conf_section["options"].items()):
             for key in keys_to_format:
                 if option[key] and "{{" in option[key]:
                     option[key] = option[key].replace("{{", "{").replace("}}", "}")
+            version_added = option["version_added"]
+            if version_added is not None and parse_version(version_added) > package_version:
+                del conf_section["options"][option_name]
+
     # Sort options, config and deprecated options for JINJA variables to display
     for section_name, config in configs.items():
         config["options"] = {k: v for k, v in sorted(config["options"].items())}
     configs = {k: v for k, v in sorted(configs.items())}
     for section in deprecated_options:
         deprecated_options[section] = {k: v for k, v in sorted(deprecated_options[section].items())}
+    return configs, deprecated_options
 
+
+# Jinja context
+if PACKAGE_NAME == "apache-airflow":
+    configs, deprecated_options = get_configs_and_deprecations(PACKAGE_NAME, airflow_version)
     jinja_contexts = {
         "config_ctx": {"configs": configs, "deprecated_options": deprecated_options},
         "quick_start_ctx": {
             "doc_root_url": f"https://airflow.apache.org/docs/apache-airflow/{PACKAGE_VERSION}/"
-            if FOR_PRODUCTION
-            else (
-                "http://apache-airflow-docs.s3-website.eu-central-1.amazonaws.com/docs/apache-airflow/latest/"
-            )
         },
         "official_download_page": {
             "base_url": f"https://downloads.apache.org/airflow/{PACKAGE_VERSION}",
@@ -426,18 +468,13 @@ if PACKAGE_NAME == "apache-airflow":
         },
     }
 elif PACKAGE_NAME.startswith("apache-airflow-providers-"):
-
-    def _load_config():
-        file_path = PACKAGE_DIR / "config_templates" / "config.yml"
-        if not file_path.exists():
-            return {}
-
-        with file_path.open() as f:
-            return yaml.safe_load(f)
-
-    config = _load_config()
+    configs, deprecated_options = get_configs_and_deprecations(PACKAGE_NAME, parse_version(PACKAGE_VERSION))
     jinja_contexts = {
-        "config_ctx": {"configs": config},
+        "config_ctx": {
+            "configs": configs,
+            "deprecated_options": deprecated_options,
+            "package_name": PACKAGE_NAME,
+        },
         "official_download_page": {
             "base_url": "https://downloads.apache.org/airflow/providers",
             "closer_lua_url": "https://www.apache.org/dyn/closer.lua/airflow/providers",
@@ -550,6 +587,8 @@ elif PACKAGE_NAME == "helm-chart":
 autodoc_mock_imports = [
     "MySQLdb",
     "adal",
+    "alibabacloud_adb20211201",
+    "alibabacloud_tea_openapi",
     "analytics",
     "azure",
     "azure.cosmos",
@@ -634,6 +673,41 @@ intersphinx_mapping = {
         "sqlalchemy",
     ]
 }
+if PACKAGE_NAME in ("apache-airflow-providers-google", "apache-airflow"):
+    intersphinx_mapping.update(
+        {
+            pkg_name: (
+                f"{THIRD_PARTY_INDEXES[pkg_name]}/",
+                (f"{INVENTORY_CACHE_DIR}/{pkg_name}/objects.inv",),
+            )
+            for pkg_name in [
+                "google-api-core",
+                "google-cloud-automl",
+                "google-cloud-bigquery",
+                "google-cloud-bigquery-datatransfer",
+                "google-cloud-bigquery-storage",
+                "google-cloud-bigtable",
+                "google-cloud-container",
+                "google-cloud-core",
+                "google-cloud-datacatalog",
+                "google-cloud-datastore",
+                "google-cloud-dlp",
+                "google-cloud-kms",
+                "google-cloud-language",
+                "google-cloud-monitoring",
+                "google-cloud-pubsub",
+                "google-cloud-redis",
+                "google-cloud-spanner",
+                "google-cloud-speech",
+                "google-cloud-storage",
+                "google-cloud-tasks",
+                "google-cloud-texttospeech",
+                "google-cloud-translate",
+                "google-cloud-videointelligence",
+                "google-cloud-vision",
+            ]
+        }
+    )
 
 # -- Options for sphinx.ext.viewcode -------------------------------------------
 # See: https://www.sphinx-doc.org/es/master/usage/extensions/viewcode.html
@@ -745,7 +819,11 @@ if PACKAGE_NAME == "apache-airflow":
 
 
 def skip_util_classes(app, what, name, obj, skip, options):
-    if (what == "data" and "STATICA_HACK" in name) or ":sphinx-autoapi-skip:" in obj.docstring:
+    if what == "data" and "STATICA_HACK" in name:
+        skip = True
+    elif ":sphinx-autoapi-skip:" in obj.docstring:
+        skip = True
+    elif ":meta private:" in obj.docstring:
         skip = True
     return skip
 

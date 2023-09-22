@@ -16,7 +16,6 @@
 # under the License.
 from __future__ import annotations
 
-import unittest
 from unittest import mock
 
 from airflow.providers.google.cloud.transfers.azure_fileshare_to_gcs import AzureFileShareToGCSOperator
@@ -31,7 +30,7 @@ GCS_CONN_ID = "google_cloud_default"
 IMPERSONATION_CHAIN = ["ACCOUNT_1", "ACCOUNT_2", "ACCOUNT_3"]
 
 
-class TestAzureFileShareToGCSOperator(unittest.TestCase):
+class TestAzureFileShareToGCSOperator:
     def test_init(self):
         """Test AzureFileShareToGCSOperator instance is properly initialized."""
 
@@ -81,11 +80,10 @@ class TestAzureFileShareToGCSOperator(unittest.TestCase):
             any_order=True,
         )
 
-        azure_fileshare_mock_hook.assert_called_once_with(AZURE_FILESHARE_CONN_ID)
+        assert azure_fileshare_mock_hook.return_value.get_file_to_stream.call_count == 3
 
         gcs_mock_hook.assert_called_once_with(
             gcp_conn_id=GCS_CONN_ID,
-            delegate_to=None,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
 

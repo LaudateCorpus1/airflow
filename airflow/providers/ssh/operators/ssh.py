@@ -19,18 +19,19 @@ from __future__ import annotations
 
 import warnings
 from base64 import b64encode
+from functools import cached_property
 from typing import TYPE_CHECKING, Sequence
 
+from deprecated.classic import deprecated
+
 from airflow.configuration import conf
-from airflow.exceptions import AirflowException
+from airflow.exceptions import AirflowException, AirflowProviderDeprecationWarning
 from airflow.models import BaseOperator
+from airflow.providers.ssh.hooks.ssh import SSHHook
+from airflow.utils.types import NOTSET, ArgNotSet
 
 if TYPE_CHECKING:
     from paramiko.client import SSHClient
-
-    from airflow.providers.ssh.hooks.ssh import SSHHook
-
-CMD_TIMEOUT = 10
 
 
 class SSHOperator(BaseOperator):
@@ -50,6 +51,8 @@ class SSHOperator(BaseOperator):
         Nullable. If provided, it will replace the `conn_timeout` which was
         predefined in the connection of `ssh_conn_id`.
     :param cmd_timeout: timeout (in seconds) for executing the command. The default is 10 seconds.
+        Nullable, `None` means no timeout. If provided, it will replace the `cmd_timeout`
+        which was predefined in the connection of `ssh_conn_id`.
     :param environment: a dict of shell environment variables. Note that the
         server will reject them silently if `AcceptEnv` is not set in SSH config. (templated)
     :param get_pty: request a pseudo-terminal from the server. Set to ``True``
@@ -84,63 +87,67 @@ class SSHOperator(BaseOperator):
         remote_host: str | None = None,
         command: str | None = None,
         conn_timeout: int | None = None,
-        cmd_timeout: int | None = None,
+        cmd_timeout: int | ArgNotSet | None = NOTSET,
         environment: dict | None = None,
         get_pty: bool = False,
         banner_timeout: float = 30.0,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.ssh_hook = ssh_hook
+        if ssh_hook and isinstance(ssh_hook, SSHHook):
+            self.ssh_hook = ssh_hook
+            if remote_host is not None:
+                self.ssh_hook.remote_host = remote_host
         self.ssh_conn_id = ssh_conn_id
         self.remote_host = remote_host
         self.command = command
         self.conn_timeout = conn_timeout
-        self.cmd_timeout = cmd_timeout if cmd_timeout else CMD_TIMEOUT
+        self.cmd_timeout = cmd_timeout
         self.environment = environment
         self.get_pty = get_pty
         self.banner_timeout = banner_timeout
 
-    def get_hook(self) -> SSHHook:
-        from airflow.providers.ssh.hooks.ssh import SSHHook
-
+    @cached_property
+    def ssh_hook(self) -> SSHHook:
+        """Create SSHHook to run commands on remote host."""
         if self.ssh_conn_id:
-            if self.ssh_hook and isinstance(self.ssh_hook, SSHHook):
-                self.log.info("ssh_conn_id is ignored when ssh_hook is provided.")
-            else:
-                self.log.info("ssh_hook is not provided or invalid. Trying ssh_conn_id to create SSHHook.")
-                self.ssh_hook = SSHHook(
-                    ssh_conn_id=self.ssh_conn_id,
-                    conn_timeout=self.conn_timeout,
-                    banner_timeout=self.banner_timeout,
-                )
-
-        if not self.ssh_hook:
-            raise AirflowException("Cannot operate without ssh_hook or ssh_conn_id.")
-
-        if self.remote_host is not None:
-            self.log.info(
-                "remote_host is provided explicitly. "
-                "It will replace the remote_host which was defined "
-                "in ssh_hook or predefined in connection of ssh_conn_id."
+            self.log.info("ssh_hook is not provided or invalid. Trying ssh_conn_id to create SSHHook.")
+            hook = SSHHook(
+                ssh_conn_id=self.ssh_conn_id,
+                conn_timeout=self.conn_timeout,
+                cmd_timeout=self.cmd_timeout,
+                banner_timeout=self.banner_timeout,
             )
-            self.ssh_hook.remote_host = self.remote_host
+            if self.remote_host is not None:
+                self.log.info(
+                    "remote_host is provided explicitly. "
+                    "It will replace the remote_host which was defined "
+                    "in ssh_hook or predefined in connection of ssh_conn_id."
+                )
+                hook.remote_host = self.remote_host
+            return hook
+        raise AirflowException("Cannot operate without ssh_hook or ssh_conn_id.")
 
+    @property
+    def hook(self) -> SSHHook:
+        return self.ssh_hook
+
+    @deprecated(reason="use `hook` property instead.", category=AirflowProviderDeprecationWarning)
+    def get_hook(self) -> SSHHook:
         return self.ssh_hook
 
     def get_ssh_client(self) -> SSHClient:
         # Remember to use context manager or call .close() on this when done
         self.log.info("Creating ssh_client")
-        return self.get_hook().get_conn()
+        return self.hook.get_conn()
 
     def exec_ssh_client_command(self, ssh_client: SSHClient, command: str):
         warnings.warn(
             "exec_ssh_client_command method on SSHOperator is deprecated, call "
             "`ssh_hook.exec_ssh_client_command` instead",
-            DeprecationWarning,
+            AirflowProviderDeprecationWarning,
         )
-        assert self.ssh_hook
-        return self.ssh_hook.exec_ssh_client_command(
+        return self.hook.exec_ssh_client_command(
             ssh_client, command, timeout=self.cmd_timeout, environment=self.environment, get_pty=self.get_pty
         )
 
@@ -152,8 +159,7 @@ class SSHOperator(BaseOperator):
             raise AirflowException(f"SSH operator error: exit status = {exit_status}")
 
     def run_ssh_client_command(self, ssh_client: SSHClient, command: str, context=None) -> bytes:
-        assert self.ssh_hook
-        exit_status, agg_stdout, agg_stderr = self.ssh_hook.exec_ssh_client_command(
+        exit_status, agg_stdout, agg_stderr = self.hook.exec_ssh_client_command(
             ssh_client, command, timeout=self.cmd_timeout, environment=self.environment, get_pty=self.get_pty
         )
         self.raise_for_status(exit_status, agg_stderr, context=context)
@@ -175,6 +181,6 @@ class SSHOperator(BaseOperator):
         return result
 
     def tunnel(self) -> None:
-        """Get ssh tunnel"""
-        ssh_client = self.ssh_hook.get_conn()  # type: ignore[union-attr]
+        """Get ssh tunnel."""
+        ssh_client = self.hook.get_conn()  # type: ignore[union-attr]
         ssh_client.get_transport()

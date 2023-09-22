@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 import os
-import unittest
 from unittest import mock
 
 import pytest
@@ -30,7 +29,6 @@ from airflow.providers.google.cloud.transfers.sftp_to_gcs import SFTPToGCSOperat
 TASK_ID = "test-gcs-to-sftp-operator"
 GCP_CONN_ID = "GCP_CONN_ID"
 SFTP_CONN_ID = "SFTP_CONN_ID"
-DELEGATE_TO = "DELEGATE_TO"
 IMPERSONATION_CHAIN = ["ACCOUNT_1", "ACCOUNT_2", "ACCOUNT_3"]
 
 DEFAULT_MIME_TYPE = "application/octet-stream"
@@ -53,7 +51,7 @@ DESTINATION_PATH_DIR = "destination_dir"
 DESTINATION_PATH_FILE = "destination_dir/copy.txt"
 
 
-class TestSFTPToGCSOperator(unittest.TestCase):
+class TestSFTPToGCSOperator:
     @mock.patch("airflow.providers.google.cloud.transfers.sftp_to_gcs.GCSHook")
     @mock.patch("airflow.providers.google.cloud.transfers.sftp_to_gcs.SFTPHook")
     def test_execute_copy_single_file(self, sftp_hook, gcs_hook):
@@ -65,19 +63,17 @@ class TestSFTPToGCSOperator(unittest.TestCase):
             move_object=False,
             gcp_conn_id=GCP_CONN_ID,
             sftp_conn_id=SFTP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
         task.execute(None)
         gcs_hook.assert_called_once_with(
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
         sftp_hook.assert_called_once_with(SFTP_CONN_ID)
 
         sftp_hook.return_value.retrieve_file.assert_called_once_with(
-            os.path.join(SOURCE_OBJECT_NO_WILDCARD), mock.ANY
+            os.path.join(SOURCE_OBJECT_NO_WILDCARD), mock.ANY, prefetch=True
         )
 
         gcs_hook.return_value.upload.assert_called_once_with(
@@ -101,20 +97,19 @@ class TestSFTPToGCSOperator(unittest.TestCase):
             move_object=False,
             gcp_conn_id=GCP_CONN_ID,
             sftp_conn_id=SFTP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
             gzip=True,
+            sftp_prefetch=False,
         )
         task.execute(None)
         gcs_hook.assert_called_once_with(
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
         sftp_hook.assert_called_once_with(SFTP_CONN_ID)
 
         sftp_hook.return_value.retrieve_file.assert_called_once_with(
-            os.path.join(SOURCE_OBJECT_NO_WILDCARD), mock.ANY
+            os.path.join(SOURCE_OBJECT_NO_WILDCARD), mock.ANY, prefetch=False
         )
 
         gcs_hook.return_value.upload.assert_called_once_with(
@@ -138,19 +133,18 @@ class TestSFTPToGCSOperator(unittest.TestCase):
             move_object=True,
             gcp_conn_id=GCP_CONN_ID,
             sftp_conn_id=SFTP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
+            sftp_prefetch=True,
         )
         task.execute(None)
         gcs_hook.assert_called_once_with(
             gcp_conn_id=GCP_CONN_ID,
-            delegate_to=DELEGATE_TO,
             impersonation_chain=IMPERSONATION_CHAIN,
         )
         sftp_hook.assert_called_once_with(SFTP_CONN_ID)
 
         sftp_hook.return_value.retrieve_file.assert_called_once_with(
-            os.path.join(SOURCE_OBJECT_NO_WILDCARD), mock.ANY
+            os.path.join(SOURCE_OBJECT_NO_WILDCARD), mock.ANY, prefetch=True
         )
 
         gcs_hook.return_value.upload.assert_called_once_with(
@@ -180,7 +174,6 @@ class TestSFTPToGCSOperator(unittest.TestCase):
             move_object=True,
             gcp_conn_id=GCP_CONN_ID,
             sftp_conn_id=SFTP_CONN_ID,
-            delegate_to=DELEGATE_TO,
         )
         task.execute(None)
 
@@ -190,8 +183,8 @@ class TestSFTPToGCSOperator(unittest.TestCase):
 
         sftp_hook.return_value.retrieve_file.assert_has_calls(
             [
-                mock.call("main_dir/test_object3.json", mock.ANY),
-                mock.call("main_dir/sub_dir/test_object3.json", mock.ANY),
+                mock.call("main_dir/test_object3.json", mock.ANY, prefetch=True),
+                mock.call("main_dir/sub_dir/test_object3.json", mock.ANY, prefetch=True),
             ]
         )
 
@@ -232,7 +225,6 @@ class TestSFTPToGCSOperator(unittest.TestCase):
             move_object=True,
             gcp_conn_id=GCP_CONN_ID,
             sftp_conn_id=SFTP_CONN_ID,
-            delegate_to=DELEGATE_TO,
         )
         task.execute(None)
 
@@ -254,7 +246,6 @@ class TestSFTPToGCSOperator(unittest.TestCase):
             move_object=False,
             gcp_conn_id=GCP_CONN_ID,
             sftp_conn_id=SFTP_CONN_ID,
-            delegate_to=DELEGATE_TO,
         )
         with pytest.raises(AirflowException) as ctx:
             task.execute(None)

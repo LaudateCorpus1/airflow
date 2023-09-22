@@ -21,12 +21,17 @@ import os
 import re
 import subprocess
 from unittest import mock
-from unittest.mock import MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 
 from airflow.exceptions import AirflowException
-from airflow.providers.apache.beam.hooks.beam import BeamCommandRunner, BeamHook, beam_options_to_args
+from airflow.providers.apache.beam.hooks.beam import (
+    BeamAsyncHook,
+    BeamHook,
+    beam_options_to_args,
+    run_beam_command,
+)
 
 PY_FILE = "apache_beam.examples.wordcount"
 JAR_FILE = "unitest.jar"
@@ -57,11 +62,10 @@ INFO: To cancel the job using the 'gcloud' tool, run:
 
 
 class TestBeamHook:
-    @mock.patch(BEAM_STRING.format("BeamCommandRunner"))
+    @mock.patch(BEAM_STRING.format("run_beam_command"))
     @mock.patch("airflow.providers.apache.beam.hooks.beam.subprocess.check_output", return_value=b"2.39.0")
     def test_start_python_pipeline(self, mock_check_output, mock_runner):
         hook = BeamHook(runner=DEFAULT_RUNNER)
-        wait_for_done = mock_runner.return_value.wait_for_done
         process_line_callback = MagicMock()
 
         hook.start_python_pipeline(
@@ -80,9 +84,11 @@ class TestBeamHook:
             "--labels=foo=bar",
         ]
         mock_runner.assert_called_once_with(
-            cmd=expected_cmd, process_line_callback=process_line_callback, working_directory=None
+            cmd=expected_cmd,
+            process_line_callback=process_line_callback,
+            working_directory=None,
+            log=ANY,
         )
-        wait_for_done.assert_called_once_with()
 
     @mock.patch("airflow.providers.apache.beam.hooks.beam.subprocess.check_output", return_value=b"2.35.0")
     def test_start_python_pipeline_unsupported_option(self, mock_check_output):
@@ -113,13 +119,12 @@ class TestBeamHook:
             pytest.param("python3.6", id="major.minor python version"),
         ],
     )
-    @mock.patch(BEAM_STRING.format("BeamCommandRunner"))
+    @mock.patch(BEAM_STRING.format("run_beam_command"))
     @mock.patch("airflow.providers.apache.beam.hooks.beam.subprocess.check_output", return_value=b"2.39.0")
     def test_start_python_pipeline_with_custom_interpreter(
         self, mock_check_output, mock_runner, py_interpreter
     ):
         hook = BeamHook(runner=DEFAULT_RUNNER)
-        wait_for_done = mock_runner.return_value.wait_for_done
         process_line_callback = MagicMock()
 
         hook.start_python_pipeline(
@@ -139,9 +144,11 @@ class TestBeamHook:
             "--labels=foo=bar",
         ]
         mock_runner.assert_called_once_with(
-            cmd=expected_cmd, process_line_callback=process_line_callback, working_directory=None
+            cmd=expected_cmd,
+            process_line_callback=process_line_callback,
+            working_directory=None,
+            log=ANY,
         )
-        wait_for_done.assert_called_once_with()
 
     @pytest.mark.parametrize(
         "current_py_requirements, current_py_system_site_packages",
@@ -152,7 +159,7 @@ class TestBeamHook:
         ],
     )
     @mock.patch(BEAM_STRING.format("prepare_virtualenv"))
-    @mock.patch(BEAM_STRING.format("BeamCommandRunner"))
+    @mock.patch(BEAM_STRING.format("run_beam_command"))
     @mock.patch("airflow.providers.apache.beam.hooks.beam.subprocess.check_output", return_value=b"2.39.0")
     def test_start_python_pipeline_with_non_empty_py_requirements_and_without_system_packages(
         self,
@@ -163,7 +170,6 @@ class TestBeamHook:
         current_py_system_site_packages,
     ):
         hook = BeamHook(runner=DEFAULT_RUNNER)
-        wait_for_done = mock_runner.return_value.wait_for_done
         mock_virtualenv.return_value = "/dummy_dir/bin/python"
         process_line_callback = MagicMock()
 
@@ -185,9 +191,11 @@ class TestBeamHook:
             "--labels=foo=bar",
         ]
         mock_runner.assert_called_once_with(
-            cmd=expected_cmd, process_line_callback=process_line_callback, working_directory=None
+            cmd=expected_cmd,
+            process_line_callback=process_line_callback,
+            working_directory=None,
+            log=ANY,
         )
-        wait_for_done.assert_called_once_with()
         mock_virtualenv.assert_called_once_with(
             venv_directory=mock.ANY,
             python_bin="python3",
@@ -195,7 +203,7 @@ class TestBeamHook:
             requirements=current_py_requirements,
         )
 
-    @mock.patch(BEAM_STRING.format("BeamCommandRunner"))
+    @mock.patch(BEAM_STRING.format("run_beam_command"))
     @mock.patch("airflow.providers.apache.beam.hooks.beam.subprocess.check_output", return_value=b"2.39.0")
     def test_start_python_pipeline_with_empty_py_requirements_and_without_system_packages(
         self, mock_check_output, mock_runner
@@ -216,10 +224,9 @@ class TestBeamHook:
         mock_runner.assert_not_called()
         wait_for_done.assert_not_called()
 
-    @mock.patch(BEAM_STRING.format("BeamCommandRunner"))
+    @mock.patch(BEAM_STRING.format("run_beam_command"))
     def test_start_java_pipeline(self, mock_runner):
         hook = BeamHook(runner=DEFAULT_RUNNER)
-        wait_for_done = mock_runner.return_value.wait_for_done
         process_line_callback = MagicMock()
 
         hook.start_java_pipeline(
@@ -237,14 +244,12 @@ class TestBeamHook:
             '--labels={"foo":"bar"}',
         ]
         mock_runner.assert_called_once_with(
-            cmd=expected_cmd, process_line_callback=process_line_callback, working_directory=None
+            cmd=expected_cmd, process_line_callback=process_line_callback, working_directory=None, log=ANY
         )
-        wait_for_done.assert_called_once_with()
 
-    @mock.patch(BEAM_STRING.format("BeamCommandRunner"))
+    @mock.patch(BEAM_STRING.format("run_beam_command"))
     def test_start_java_pipeline_with_job_class(self, mock_runner):
         hook = BeamHook(runner=DEFAULT_RUNNER)
-        wait_for_done = mock_runner.return_value.wait_for_done
         process_line_callback = MagicMock()
 
         hook.start_java_pipeline(
@@ -264,16 +269,17 @@ class TestBeamHook:
             '--labels={"foo":"bar"}',
         ]
         mock_runner.assert_called_once_with(
-            cmd=expected_cmd, process_line_callback=process_line_callback, working_directory=None
+            cmd=expected_cmd,
+            process_line_callback=process_line_callback,
+            working_directory=None,
+            log=ANY,
         )
-        wait_for_done.assert_called_once_with()
 
     @mock.patch(BEAM_STRING.format("shutil.which"))
-    @mock.patch(BEAM_STRING.format("BeamCommandRunner"))
+    @mock.patch(BEAM_STRING.format("run_beam_command"))
     def test_start_go_pipeline(self, mock_runner, mock_which):
         mock_which.return_value = "/some_path/to/go"
         hook = BeamHook(runner=DEFAULT_RUNNER)
-        wait_for_done = mock_runner.return_value.wait_for_done
         process_line_callback = MagicMock()
 
         hook.start_go_pipeline(
@@ -293,9 +299,11 @@ class TestBeamHook:
             '--labels={"foo":"bar"}',
         ]
         mock_runner.assert_called_once_with(
-            cmd=expected_cmd, process_line_callback=process_line_callback, working_directory=go_workspace
+            cmd=expected_cmd,
+            process_line_callback=process_line_callback,
+            working_directory=go_workspace,
+            log=ANY,
         )
-        wait_for_done.assert_called_once_with()
 
     @mock.patch(BEAM_STRING.format("shutil.which"))
     def test_start_go_pipeline_without_go_installed_raises(self, mock_which):
@@ -312,10 +320,9 @@ class TestBeamHook:
                 variables=copy.deepcopy(BEAM_VARIABLES_GO),
             )
 
-    @mock.patch(BEAM_STRING.format("BeamCommandRunner"))
+    @mock.patch(BEAM_STRING.format("run_beam_command"))
     def test_start_go_pipeline_with_binary(self, mock_runner):
         hook = BeamHook(runner=DEFAULT_RUNNER)
-        wait_for_done_method = mock_runner.return_value.wait_for_done
         process_line_callback = MagicMock()
 
         launcher_binary = "/path/to/launcher-main"
@@ -337,17 +344,19 @@ class TestBeamHook:
         ]
 
         mock_runner.assert_called_once_with(
-            cmd=expected_cmd, process_line_callback=process_line_callback, working_directory=None
+            cmd=expected_cmd,
+            process_line_callback=process_line_callback,
+            working_directory=None,
+            log=ANY,
         )
-        wait_for_done_method.assert_called_once_with()
 
 
 class TestBeamRunner:
-    @mock.patch("airflow.providers.apache.beam.hooks.beam.BeamCommandRunner.log")
     @mock.patch("subprocess.Popen")
     @mock.patch("select.select")
-    def test_beam_wait_for_done_logging(self, mock_select, mock_popen, mock_logging):
+    def test_beam_wait_for_done_logging(self, mock_select, mock_popen):
         cmd = ["test", "cmd"]
+        mock_logging = MagicMock()
         mock_logging.info = MagicMock()
         mock_logging.warning = MagicMock()
         mock_proc = MagicMock()
@@ -365,13 +374,12 @@ class TestBeamRunner:
         mock_proc_poll.side_effect = [None, poll_resp_error]
         mock_proc.poll = mock_proc_poll
         mock_popen.return_value = mock_proc
-        beam = BeamCommandRunner(cmd)
-        mock_logging.info.assert_called_once_with("Running command: %s", " ".join(cmd))
-        mock_popen.assert_called_once_with(
-            cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True, cwd=None
-        )
         with pytest.raises(Exception):
-            beam.wait_for_done()
+            run_beam_command(cmd, None, None, mock_logging)
+            mock_logging.info.assert_called_once_with("Running command: %s", " ".join(cmd))
+            mock_popen.assert_called_once_with(
+                cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True, cwd=None
+            )
 
 
 class TestBeamOptionsToArgs:
@@ -388,3 +396,171 @@ class TestBeamOptionsToArgs:
     def test_beam_options_to_args(self, options, expected_args):
         args = beam_options_to_args(options)
         assert args == expected_args
+
+
+class TestBeamAsyncHook:
+    @pytest.mark.asyncio
+    @mock.patch("airflow.providers.apache.beam.hooks.beam.BeamAsyncHook.run_beam_command_async")
+    @mock.patch("airflow.providers.apache.beam.hooks.beam.BeamAsyncHook._create_tmp_dir")
+    async def test_start_python_pipeline(self, mock_create_dir, mock_runner):
+        hook = BeamAsyncHook(runner=DEFAULT_RUNNER)
+        mock_create_dir.return_value = AsyncMock()
+        mock_runner.return_value = 0
+
+        await hook.start_python_pipeline_async(
+            variables=copy.deepcopy(BEAM_VARIABLES_PY),
+            py_file=PY_FILE,
+            py_options=PY_OPTIONS,
+        )
+
+        expected_cmd = [
+            "python3",
+            "-m",
+            PY_FILE,
+            f"--runner={DEFAULT_RUNNER}",
+            "--output=gs://test/output",
+            "--labels=foo=bar",
+        ]
+        mock_create_dir.assert_called_once()
+        mock_runner.assert_called_once_with(
+            cmd=expected_cmd,
+            working_directory=None,
+            log=ANY,
+        )
+
+    @pytest.mark.asyncio
+    @mock.patch("airflow.providers.apache.beam.hooks.beam.subprocess.check_output", return_value=b"2.35.0")
+    async def test_start_python_pipeline_unsupported_option(self, mock_check_output):
+        hook = BeamAsyncHook(runner=DEFAULT_RUNNER)
+
+        with pytest.raises(
+            AirflowException,
+            match=re.escape("The impersonateServiceAccount option requires Apache Beam 2.39.0 or newer."),
+        ):
+            await hook.start_python_pipeline_async(
+                variables={
+                    "impersonate_service_account": "test@impersonation.com",
+                },
+                py_file="/tmp/file.py",
+                py_options=["-m"],
+                py_interpreter="python3",
+                py_requirements=None,
+                py_system_site_packages=False,
+            )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "py_interpreter",
+        [
+            pytest.param("python", id="default python"),
+            pytest.param("python2", id="major python version 2.x"),
+            pytest.param("python3", id="major python version 3.x"),
+            pytest.param("python3.6", id="major.minor python version"),
+        ],
+    )
+    @mock.patch("airflow.providers.apache.beam.hooks.beam.BeamAsyncHook.run_beam_command_async")
+    @mock.patch("airflow.providers.apache.beam.hooks.beam.BeamAsyncHook._create_tmp_dir")
+    @mock.patch("airflow.providers.apache.beam.hooks.beam.subprocess.check_output", return_value=b"2.39.0")
+    async def test_start_python_pipeline_with_custom_interpreter(
+        self, mock_check_output, mock_create_dir, mock_runner, py_interpreter
+    ):
+        hook = BeamAsyncHook(runner=DEFAULT_RUNNER)
+        mock_create_dir.return_value = AsyncMock()
+        mock_runner.return_value = 0
+
+        await hook.start_python_pipeline_async(
+            variables=copy.deepcopy(BEAM_VARIABLES_PY),
+            py_file=PY_FILE,
+            py_options=PY_OPTIONS,
+            py_interpreter=py_interpreter,
+        )
+
+        expected_cmd = [
+            py_interpreter,
+            "-m",
+            PY_FILE,
+            f"--runner={DEFAULT_RUNNER}",
+            "--output=gs://test/output",
+            "--labels=foo=bar",
+        ]
+        mock_runner.assert_called_once_with(
+            cmd=expected_cmd,
+            working_directory=None,
+            log=ANY,
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "current_py_requirements, current_py_system_site_packages",
+        [
+            pytest.param("foo-bar", False, id="requirements without system site-packages"),
+            pytest.param("foo-bar", True, id="requirements with system site-packages"),
+            pytest.param([], True, id="only system site-packages"),
+        ],
+    )
+    @mock.patch(BEAM_STRING.format("prepare_virtualenv"))
+    @mock.patch("airflow.providers.apache.beam.hooks.beam.BeamAsyncHook.run_beam_command_async")
+    @mock.patch("airflow.providers.apache.beam.hooks.beam.subprocess.check_output", return_value=b"2.39.0")
+    @mock.patch("airflow.providers.apache.beam.hooks.beam.BeamAsyncHook._create_tmp_dir")
+    @mock.patch("airflow.providers.apache.beam.hooks.beam.BeamAsyncHook._cleanup_tmp_dir")
+    async def test_start_python_pipeline_with_non_empty_py_requirements_and_without_system_packages(
+        self,
+        mock_cleanup_dir,
+        mock_create_dir,
+        mock_check_output,
+        mock_runner,
+        mock_virtualenv,
+        current_py_requirements,
+        current_py_system_site_packages,
+    ):
+        hook = BeamAsyncHook(runner=DEFAULT_RUNNER)
+        mock_create_dir.return_value = AsyncMock()
+        mock_virtualenv.return_value = "/dummy_dir/bin/python"
+        mock_cleanup_dir.return_value = AsyncMock()
+
+        await hook.start_python_pipeline_async(
+            variables=copy.deepcopy(BEAM_VARIABLES_PY),
+            py_file=PY_FILE,
+            py_options=PY_OPTIONS,
+            py_requirements=current_py_requirements,
+            py_system_site_packages=current_py_system_site_packages,
+        )
+
+        expected_cmd = [
+            "/dummy_dir/bin/python",
+            "-m",
+            PY_FILE,
+            f"--runner={DEFAULT_RUNNER}",
+            "--output=gs://test/output",
+            "--labels=foo=bar",
+        ]
+        mock_runner.assert_called_once_with(
+            cmd=expected_cmd,
+            working_directory=None,
+            log=ANY,
+        )
+        mock_virtualenv.assert_called_once_with(
+            venv_directory=mock.ANY,
+            python_bin="python3",
+            system_site_packages=current_py_system_site_packages,
+            requirements=current_py_requirements,
+        )
+        mock_create_dir.assert_called_once()
+
+    @pytest.mark.asyncio
+    @mock.patch(BEAM_STRING.format("run_beam_command"))
+    @mock.patch("airflow.providers.apache.beam.hooks.beam.subprocess.check_output", return_value=b"2.39.0")
+    async def test_start_python_pipeline_with_empty_py_requirements_and_without_system_packages(
+        self, mock_check_output, mock_runner
+    ):
+        hook = BeamAsyncHook(runner=DEFAULT_RUNNER)
+
+        with pytest.raises(AirflowException, match=r"Invalid method invocation\."):
+            await hook.start_python_pipeline_async(
+                variables=copy.deepcopy(BEAM_VARIABLES_PY),
+                py_file=PY_FILE,
+                py_options=PY_OPTIONS,
+                py_requirements=[],
+            )
+
+        mock_runner.assert_not_called()

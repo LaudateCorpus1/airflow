@@ -28,14 +28,126 @@ For high-level changelog, see :doc:`package information including changelog <ind
 
 
 
+5.2.3
+.....
+
+Latest change: 2023-08-31
+
+=================================================================================================  ===========  ===================================================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ===================================================================================================
+`55976af32e <https://github.com/apache/airflow/commit/55976af32ea7d09831e2bcd21c0f3814d9b0eb3f>`_  2023-08-31   ``Replace sequence concatination by unpacking in Airflow providers (#33933)``
+`9d8c77e447 <https://github.com/apache/airflow/commit/9d8c77e447f5515b9a6aa85fa72511a86a128c28>`_  2023-08-27   ``Improve modules import in Airflow providers by some of them into a type-checking block (#33754)``
+=================================================================================================  ===========  ===================================================================================================
+
+5.2.2
+.....
+
+Latest change: 2023-08-26
+
+=================================================================================================  ===========  =========================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  =========================================================================
+`c077d19060 <https://github.com/apache/airflow/commit/c077d190609f931387c1fcd7b8cc34f12e2372b9>`_  2023-08-26   ``Prepare docs for Aug 2023 3rd wave of Providers (#33730)``
+`32feab4100 <https://github.com/apache/airflow/commit/32feab41006897de182bfa684813be230027aca1>`_  2023-08-22   ``Refactor: Simplify code in Apache/Alibaba providers (#33227)``
+`c645d8e40c <https://github.com/apache/airflow/commit/c645d8e40c167ea1f6c332cdc3ea0ca5a9363205>`_  2023-08-12   ``D401 Support - Providers: Airbyte to Atlassian (Inclusive) (#33354)``
+`bfa09da138 <https://github.com/apache/airflow/commit/bfa09da1380f0f1e0727dbbc9f1878bd44eb848d>`_  2023-08-11   ``Fix wrong OR condition when evaluating beam version < 2.39.0 (#33308)``
+`7e79997594 <https://github.com/apache/airflow/commit/7e799975948573ca2a1c4b2051d3eadc32bb8ba7>`_  2023-08-11   ``D205 Support - Providers - Final Pass (#33303)``
+=================================================================================================  ===========  =========================================================================
+
+5.2.1
+.....
+
+Latest change: 2023-08-11
+
+=================================================================================================  ===========  ============================================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ============================================================================================
+`b5a4d36383 <https://github.com/apache/airflow/commit/b5a4d36383c4143f46e168b8b7a4ba2dc7c54076>`_  2023-08-11   ``Prepare docs for Aug 2023 2nd wave of Providers (#33291)``
+`1839b683e7 <https://github.com/apache/airflow/commit/1839b683e7974f7f553af2689a64ee36cf1ec006>`_  2023-08-06   ``Allow downloading requirements file from GCS in 'BeamRunPythonPipelineOperator' (#31645)``
+=================================================================================================  ===========  ============================================================================================
+
+5.2.0
+.....
+
+Latest change: 2023-07-29
+
+=================================================================================================  ===========  ===================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ===================================================================
+`d06b7af69a <https://github.com/apache/airflow/commit/d06b7af69a65c50321ba2a9904551f3b8affc7f1>`_  2023-07-29   ``Prepare docs for July 2023 3rd wave of Providers (#32875)``
+`44b4a3755d <https://github.com/apache/airflow/commit/44b4a3755deea23f8ff0eb1316db880b1d64812c>`_  2023-07-13   ``Add deferrable mode to 'BeamRunPythonPipelineOperator' (#31471)``
+`225e3041d2 <https://github.com/apache/airflow/commit/225e3041d269698d0456e09586924c1898d09434>`_  2023-07-06   ``Prepare docs for July 2023 wave of Providers (RC2) (#32381)``
+`3878fe6fab <https://github.com/apache/airflow/commit/3878fe6fab3ccc1461932b456c48996f2763139f>`_  2023-07-05   ``Remove spurious headers for provider changelogs (#32373)``
+`cb4927a018 <https://github.com/apache/airflow/commit/cb4927a01887e2413c45d8d9cb63e74aa994ee74>`_  2023-07-05   ``Prepare docs for July 2023 wave of Providers (#32298)``
+`8c37b74a20 <https://github.com/apache/airflow/commit/8c37b74a208a808d905c1b86d081d69d7a1aa900>`_  2023-06-28   ``D205 Support - Providers: Apache to Common (inclusive) (#32226)``
+`09d4718d3a <https://github.com/apache/airflow/commit/09d4718d3a46aecf3355d14d3d23022002f4a818>`_  2023-06-27   ``Improve provider documentation and README structure (#32125)``
+=================================================================================================  ===========  ===================================================================
+
+5.1.1
+.....
+
+Latest change: 2023-06-20
+
+=================================================================================================  ===========  ==============================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ==============================================================
+`79bcc2e668 <https://github.com/apache/airflow/commit/79bcc2e668e648098aad6eaa87fe8823c76bc69a>`_  2023-06-20   ``Prepare RC1 docs for June 2023 wave of Providers (#32001)``
+`8b146152d6 <https://github.com/apache/airflow/commit/8b146152d62118defb3004c997c89c99348ef948>`_  2023-06-20   ``Add note about dropping Python 3.7 for providers (#32015)``
+`a473facf6c <https://github.com/apache/airflow/commit/a473facf6c0b36f7d051ecc2d1aa94ba6957468d>`_  2023-06-01   ``Add D400 pydocstyle check - Apache providers only (#31424)``
+=================================================================================================  ===========  ==============================================================
+
+5.1.0
+.....
+
+Latest change: 2023-05-19
+
+=================================================================================================  ===========  ======================================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ======================================================================================
+`45548b9451 <https://github.com/apache/airflow/commit/45548b9451fba4e48c6f0c0ba6050482c2ea2956>`_  2023-05-19   ``Prepare RC2 docs for May 2023 wave of Providers (#31416)``
+`abea189022 <https://github.com/apache/airflow/commit/abea18902257c0250fedb764edda462f9e5abc84>`_  2023-05-18   ``Use '__version__' in providers not 'version' (#31393)``
+`f5aed58d9f <https://github.com/apache/airflow/commit/f5aed58d9fb2137fa5f0e3ce75b6709bf8393a94>`_  2023-05-18   ``Fixing circular import error in providers caused by airflow version check (#31379)``
+`28d1bf8dfc <https://github.com/apache/airflow/commit/28d1bf8dfc03787cc2b4373bbaa27527bdd91846>`_  2023-05-18   ``Update SDKs for google provider package (#30067)``
+`d9ff55cf6d <https://github.com/apache/airflow/commit/d9ff55cf6d95bb342fed7a87613db7b9e7c8dd0f>`_  2023-05-16   ``Prepare docs for May 2023 wave of Providers (#31252)``
+`eef5bc7f16 <https://github.com/apache/airflow/commit/eef5bc7f166dc357fea0cc592d39714b1a5e3c14>`_  2023-05-03   ``Add full automation for min Airflow version for providers (#30994)``
+`a7eb32a5b2 <https://github.com/apache/airflow/commit/a7eb32a5b222e236454d3e474eec478ded7c368d>`_  2023-04-30   ``Bump minimum Airflow version in providers (#30917)``
+=================================================================================================  ===========  ======================================================================================
+
+5.0.0
+.....
+
+Latest change: 2023-04-21
+
+=================================================================================================  ===========  ============================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ============================================================
+`e46ce78b66 <https://github.com/apache/airflow/commit/e46ce78b66953146c04de5da00cab6299787adad>`_  2023-04-21   ``Prepare docs for adhoc release of providers (#30787)``
+`fbc1382514 <https://github.com/apache/airflow/commit/fbc13825140cc6cc6b3d4b27db6d329692a1c451>`_  2023-04-21   ``remove delegate_to from GCP operators and hooks (#30748)``
+`d23a3bbed8 <https://github.com/apache/airflow/commit/d23a3bbed89ae04369983f21455bf85ccc1ae1cb>`_  2023-04-04   ``Add mechanism to suspend providers (#30422)``
+=================================================================================================  ===========  ============================================================
+
+4.3.0
+.....
+
+Latest change: 2023-02-18
+
+=================================================================================================  ===========  ================================================================
+Commit                                                                                             Committed    Subject
+=================================================================================================  ===========  ================================================================
+`470fdaea27 <https://github.com/apache/airflow/commit/470fdaea275660970777c0f72b8867b382eabc14>`_  2023-02-18   ``Prepare docs for 02 2023 midmonth wave of Providers (#29589)``
+`7ba27e7881 <https://github.com/apache/airflow/commit/7ba27e78812b890f0c7642d78a986fe325ff61c4>`_  2023-02-17   ``Get rid of state in Apache Beam provider hook (#29503)``
+=================================================================================================  ===========  ================================================================
+
 4.2.0
 .....
 
-Latest change: 2023-01-23
+Latest change: 2023-02-08
 
 =================================================================================================  ===========  =================================================================================
 Commit                                                                                             Committed    Subject
 =================================================================================================  ===========  =================================================================================
+`ce6ae2457e <https://github.com/apache/airflow/commit/ce6ae2457ef3d9f44f0086b58026909170bbf22a>`_  2023-02-08   ``Prepare docs for Feb 2023 wave of Providers (#29379)``
 `3374fdfcbd <https://github.com/apache/airflow/commit/3374fdfcbddb630b4fc70ceedd5aed673e6c0a0d>`_  2023-01-23   ``Deprecate 'delegate_to' param in GCP operators and update docs (#29088)``
 `8c4303e1ac <https://github.com/apache/airflow/commit/8c4303e1ace0774244b556a8d86a19058af2b16d>`_  2023-01-18   ``Add support for running a Beam Go pipeline with an executable binary (#28764)``
 =================================================================================================  ===========  =================================================================================

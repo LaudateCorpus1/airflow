@@ -21,7 +21,7 @@ import warnings
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Sequence
 
-from airflow import AirflowException
+from airflow.exceptions import AirflowException, AirflowProviderDeprecationWarning
 from airflow.models import BaseOperator
 from airflow.providers.google.cloud.hooks.gcs import GCSHook, _parse_gcs_url, gcs_object_is_directory
 from airflow.providers.microsoft.azure.hooks.fileshare import AzureFileShareHook
@@ -32,8 +32,9 @@ if TYPE_CHECKING:
 
 class AzureFileShareToGCSOperator(BaseOperator):
     """
-    Synchronizes a Azure FileShare directory content (excluding subdirectories),
-    possibly filtered by a prefix, with a Google Cloud Storage destination path.
+    Sync an Azure FileShare directory with a Google Cloud Storage destination path.
+
+    Does not include subdirectories.  May be filtered by prefix.
 
     :param share_name: The Azure FileShare share where to find the objects. (templated)
     :param directory_name: (Optional) Path to Azure FileShare directory which content is to be transferred.
@@ -44,9 +45,6 @@ class AzureFileShareToGCSOperator(BaseOperator):
     :param gcp_conn_id: (Optional) The connection ID used to connect to Google Cloud.
     :param dest_gcs: The destination Google Cloud Storage bucket and prefix
         where you want to store the files. (templated)
-    :param delegate_to: Google account to impersonate using domain-wide delegation of authority,
-        if any. For this to work, the service account making the request must have
-        domain-wide delegation enabled.
     :param replace: Whether you want to replace existing destination files
         or not.
     :param gzip: Option to compress file for upload
@@ -76,10 +74,10 @@ class AzureFileShareToGCSOperator(BaseOperator):
         share_name: str,
         dest_gcs: str,
         directory_name: str | None = None,
+        directory_path: str | None = None,
         prefix: str = "",
         azure_fileshare_conn_id: str = "azure_fileshare_default",
         gcp_conn_id: str = "google_cloud_default",
-        delegate_to: str | None = None,
         replace: bool = False,
         gzip: bool = False,
         google_impersonation_chain: str | Sequence[str] | None = None,
@@ -88,17 +86,19 @@ class AzureFileShareToGCSOperator(BaseOperator):
         super().__init__(**kwargs)
 
         self.share_name = share_name
+        self.directory_path = directory_path
         self.directory_name = directory_name
+        if self.directory_path is None:
+            self.directory_path = directory_name
+            warnings.warn(
+                "Use 'directory_path' instead of 'directory_name'.",
+                AirflowProviderDeprecationWarning,
+                stacklevel=2,
+            )
         self.prefix = prefix
         self.azure_fileshare_conn_id = azure_fileshare_conn_id
         self.gcp_conn_id = gcp_conn_id
         self.dest_gcs = dest_gcs
-        if delegate_to:
-            warnings.warn(
-                "'delegate_to' parameter is deprecated, please use 'google_impersonation_chain'",
-                DeprecationWarning,
-            )
-        self.delegate_to = delegate_to
         self.replace = replace
         self.gzip = gzip
         self.google_impersonation_chain = google_impersonation_chain
@@ -116,14 +116,15 @@ class AzureFileShareToGCSOperator(BaseOperator):
 
     def execute(self, context: Context):
         self._check_inputs()
-        azure_fileshare_hook = AzureFileShareHook(self.azure_fileshare_conn_id)
-        files = azure_fileshare_hook.list_files(
-            share_name=self.share_name, directory_name=self.directory_name
+        azure_fileshare_hook = AzureFileShareHook(
+            share_name=self.share_name,
+            azure_fileshare_conn_id=self.azure_fileshare_conn_id,
+            directory_path=self.directory_path,
         )
+        files = azure_fileshare_hook.list_files()
 
         gcs_hook = GCSHook(
             gcp_conn_id=self.gcp_conn_id,
-            delegate_to=self.delegate_to,
             impersonation_chain=self.google_impersonation_chain,
         )
 
@@ -152,16 +153,17 @@ class AzureFileShareToGCSOperator(BaseOperator):
 
         if files:
             self.log.info("%s files are going to be synced.", len(files))
-            if self.directory_name is None:
+            if self.directory_path is None:
                 raise RuntimeError("The directory_name must be set!.")
             for file in files:
+                azure_fileshare_hook = AzureFileShareHook(
+                    share_name=self.share_name,
+                    azure_fileshare_conn_id=self.azure_fileshare_conn_id,
+                    directory_path=self.directory_path,
+                    file_path=file,
+                )
                 with NamedTemporaryFile() as temp_file:
-                    azure_fileshare_hook.get_file_to_stream(
-                        stream=temp_file,
-                        share_name=self.share_name,
-                        directory_name=self.directory_name,
-                        file_name=file,
-                    )
+                    azure_fileshare_hook.get_file_to_stream(stream=temp_file)
                     temp_file.flush()
 
                     # There will always be a '/' before file because it is

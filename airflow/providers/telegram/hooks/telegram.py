@@ -15,8 +15,10 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Hook for Telegram"""
+"""Hook for Telegram."""
 from __future__ import annotations
+
+import asyncio
 
 import telegram
 import tenacity
@@ -67,17 +69,17 @@ class TelegramHook(BaseHook):
         self.chat_id = self.__get_chat_id(chat_id, telegram_conn_id)
         self.connection = self.get_conn()
 
-    def get_conn(self) -> telegram.bot.Bot:
+    def get_conn(self) -> telegram.Bot:
         """
-        Returns the telegram bot client
+        Returns the telegram bot client.
 
         :return: telegram bot client
         """
-        return telegram.bot.Bot(token=self.token)
+        return telegram.Bot(self.token)
 
     def __get_token(self, token: str | None, telegram_conn_id: str | None) -> str:
         """
-        Returns the telegram API token
+        Returns the telegram API token.
 
         :param token: telegram API token
         :param telegram_conn_id: telegram connection name
@@ -98,7 +100,7 @@ class TelegramHook(BaseHook):
 
     def __get_chat_id(self, chat_id: str | None, telegram_conn_id: str | None) -> str | None:
         """
-        Returns the telegram chat ID for a chat/channel/group
+        Returns the telegram chat ID for a chat/channel/group.
 
         :param chat_id: optional chat ID
         :param telegram_conn_id: telegram connection name
@@ -126,7 +128,7 @@ class TelegramHook(BaseHook):
         """
         kwargs = {
             "chat_id": self.chat_id,
-            "parse_mode": telegram.parsemode.ParseMode.HTML,
+            "parse_mode": telegram.constants.ParseMode.HTML,
             "disable_web_page_preview": True,
         }
         kwargs.update(api_params)
@@ -137,5 +139,5 @@ class TelegramHook(BaseHook):
         if kwargs["chat_id"] is None:
             raise AirflowException("'chat_id' must be provided for telegram message")
 
-        response = self.connection.send_message(**kwargs)
+        response = asyncio.run(self.connection.send_message(**kwargs))
         self.log.debug(response)

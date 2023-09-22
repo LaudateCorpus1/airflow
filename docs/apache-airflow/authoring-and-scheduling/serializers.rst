@@ -26,7 +26,7 @@ and efficiency.
 Serialization is a surprisingly hard job. Python out of the box only has support for serialization of primitives,
 like ``str`` and ``int`` and it loops over iterables. When things become more complex, custom serialization is required.
 
-Airflow out of the box supports three ways of custom serialization. Primitives are are returned as is, without
+Airflow out of the box supports three ways of custom serialization. Primitives are returned as is, without
 additional encoding, e.g. a ``str`` remains a ``str``. When it is not a primitive (or iterable thereof) Airflow
 looks for a registered serializer and deserializer in the namespace of ``airflow.serialization.serializers``.
 If not found it will look in the class for a ``serialize()`` method or in case of deserialization a
@@ -47,9 +47,9 @@ but its keys need to be of primitive form. In case you are implementing a regist
 not to have circular imports. Typically, this can be avoided by using ``str`` for populating the list of serializers.
 Like so: ``serializers = ["my.company.Foo"]`` instead of ``serializers = [Foo]``.
 
-::
+.. note::
 
-  Note: Serialization and deserialization is dependent on speed. Use built-in functions like ``dict`` as much as you can and stay away from using classes and other complex structures.
+  Serialization and deserialization is dependent on speed. Use built-in functions like ``dict`` as much as you can and stay away from using classes and other complex structures.
 
 Airflow Object
 --------------

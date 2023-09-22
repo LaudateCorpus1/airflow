@@ -31,8 +31,7 @@ if TYPE_CHECKING:
 
 class SFTPToS3Operator(BaseOperator):
     """
-    This operator enables the transferring of files from a SFTP server to
-    Amazon S3.
+    Transfer files from an SFTP server to Amazon S3.
 
     .. seealso::
         For more information on how to use this operator, take a look at the guide:
@@ -52,7 +51,7 @@ class SFTPToS3Operator(BaseOperator):
         if False streams file from SFTP to S3.
     """
 
-    template_fields: Sequence[str] = ("s3_key", "sftp_path")
+    template_fields: Sequence[str] = ("s3_key", "sftp_path", "s3_bucket")
 
     def __init__(
         self,
@@ -75,7 +74,7 @@ class SFTPToS3Operator(BaseOperator):
 
     @staticmethod
     def get_s3_key(s3_key: str) -> str:
-        """This parses the correct format for S3 keys regardless of how the S3 url is passed."""
+        """Parse the correct format for S3 keys regardless of how the S3 url is passed."""
         parsed_s3_key = urlsplit(s3_key)
         return parsed_s3_key.path.lstrip("/")
 

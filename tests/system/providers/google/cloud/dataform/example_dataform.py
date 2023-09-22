@@ -26,6 +26,7 @@ from datetime import datetime
 from google.cloud.dataform_v1beta1 import WorkflowInvocation
 
 from airflow import models
+from airflow.providers.google.cloud.operators.bigquery import BigQueryDeleteDatasetOperator
 from airflow.providers.google.cloud.operators.dataform import (
     DataformCancelWorkflowInvocationOperator,
     DataformCreateCompilationResultOperator,
@@ -54,6 +55,7 @@ DAG_ID = "example_dataform"
 REPOSITORY_ID = f"example_dataform_repository_{ENV_ID}"
 REGION = "us-central1"
 WORKSPACE_ID = f"example_dataform_workspace_{ENV_ID}"
+DATAFORM_SCHEMA_NAME = f"schema_{DAG_ID}_{ENV_ID}"
 
 # This DAG is not self-run we need to do some extra configuration to execute it in automation process
 with models.DAG(
@@ -90,6 +92,7 @@ with models.DAG(
         workspace_id=WORKSPACE_ID,
         package_name=f"dataform_package_{ENV_ID}",
         without_installation=True,
+        dataform_schema_name=DATAFORM_SCHEMA_NAME,
     )
     # [END howto_initialize_workspace]
 
@@ -250,6 +253,13 @@ with models.DAG(
     )
     # [END howto_operator_remove_directory]
 
+    delete_dataset = BigQueryDeleteDatasetOperator(
+        task_id="delete_dataset",
+        dataset_id=DATAFORM_SCHEMA_NAME,
+        delete_contents=True,
+        trigger_rule=TriggerRule.ALL_DONE,
+    )
+
     # [START howto_operator_delete_workspace]
     delete_workspace = DataformDeleteWorkspaceOperator(
         task_id="delete-workspace",
@@ -289,6 +299,7 @@ with models.DAG(
         >> write_test_file
         >> remove_test_file
         >> remove_test_directory
+        >> delete_dataset
         >> delete_workspace
         >> delete_repository
     )

@@ -17,8 +17,8 @@
 # under the License.
 from __future__ import annotations
 
-from airflow.jobs.base_job import BaseJob
-from airflow.jobs.triggerer_job import TriggererJob
+from airflow.auth.managers.fab.models import Permission, Resource, assoc_permission_role
+from airflow.jobs.job import Job
 from airflow.models import (
     Connection,
     DagModel,
@@ -51,12 +51,11 @@ from airflow.models.serialized_dag import SerializedDagModel
 from airflow.security.permissions import RESOURCE_DAG_PREFIX
 from airflow.utils.db import add_default_pool_if_not_exists, create_default_connections, reflect_tables
 from airflow.utils.session import create_session
-from airflow.www.fab_security.sqla.models import Permission, Resource, assoc_permission_role
 
 
 def clear_db_runs():
     with create_session() as session:
-        session.query(TriggererJob).delete()
+        session.query(Job).delete()
         session.query(Trigger).delete()
         session.query(DagRun).delete()
         session.query(TaskInstance).delete()
@@ -83,7 +82,7 @@ def drop_tables_with_prefix(prefix):
         metadata = reflect_tables(None, session)
         for table_name, table in metadata.tables.items():
             if table_name.startswith(prefix):
-                table.drop()
+                table.drop(session.bind)
 
 
 def clear_db_serialized_dags():
@@ -157,7 +156,7 @@ def clear_db_logs():
 
 def clear_db_jobs():
     with create_session() as session:
-        session.query(BaseJob).delete()
+        session.query(Job).delete()
 
 
 def clear_db_task_fail():

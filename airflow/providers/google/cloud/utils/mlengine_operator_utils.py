@@ -21,17 +21,20 @@ import base64
 import json
 import os
 import re
-from typing import Callable, Iterable, TypeVar
+from typing import TYPE_CHECKING, Callable, Iterable, TypeVar
 from urllib.parse import urlsplit
 
 import dill
 
-from airflow import DAG
 from airflow.exceptions import AirflowException
 from airflow.operators.python import PythonOperator
+from airflow.providers.apache.beam.hooks.beam import BeamRunnerType
 from airflow.providers.apache.beam.operators.beam import BeamRunPythonPipelineOperator
 from airflow.providers.google.cloud.hooks.gcs import GCSHook
 from airflow.providers.google.cloud.operators.mlengine import MLEngineStartBatchPredictionJobOperator
+
+if TYPE_CHECKING:
+    from airflow import DAG
 
 T = TypeVar("T", bound=Callable)
 
@@ -190,7 +193,7 @@ def create_evaluate_ops(
 
     # Verify that task_prefix doesn't have any special characters except hyphen
     # '-', which is the only allowed non-alphanumeric character by Dataflow.
-    if not re.match(r"^[a-zA-Z][-A-Za-z0-9]*$", task_prefix):
+    if not re.fullmatch(r"[a-zA-Z][-A-Za-z0-9]*", task_prefix):
         raise AirflowException(
             "Malformed task_id for DataFlowPythonOperator (only alphanumeric "
             "and hyphens are allowed but got: " + task_prefix
@@ -227,6 +230,7 @@ def create_evaluate_ops(
     metric_fn_encoded = base64.b64encode(dill.dumps(metric_fn, recurse=True)).decode()
     evaluate_summary = BeamRunPythonPipelineOperator(
         task_id=(task_prefix + "-summary"),
+        runner=BeamRunnerType.DataflowRunner,
         py_file=os.path.join(os.path.dirname(__file__), "mlengine_prediction_summary.py"),
         default_pipeline_options=dataflow_options,
         pipeline_options={
@@ -235,7 +239,7 @@ def create_evaluate_ops(
             "metric_keys": ",".join(metric_keys),
         },
         py_interpreter=py_interpreter,
-        py_requirements=["apache-beam[gcp]>=2.14.0"],
+        py_requirements=["apache-beam[gcp]>=2.46.0"],
         dag=dag,
     )
     evaluate_summary.set_upstream(evaluate_prediction)

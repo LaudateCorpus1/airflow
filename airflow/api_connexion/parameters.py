@@ -16,21 +16,27 @@
 # under the License.
 from __future__ import annotations
 
-from datetime import datetime
+import logging
 from functools import wraps
-from typing import Any, Callable, Container, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Callable, Container, TypeVar, cast
 
 from pendulum.parsing import ParserError
 from sqlalchemy import text
-from sqlalchemy.orm.query import Query
 
 from airflow.api_connexion.exceptions import BadRequest
 from airflow.configuration import conf
 from airflow.utils import timezone
 
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from sqlalchemy.sql import Select
+
+log = logging.getLogger(__name__)
+
 
 def validate_istimezone(value: datetime) -> None:
-    """Validates that a datetime is not naive."""
+    """Validate that a datetime is not naive."""
     if not value.tzinfo:
         raise BadRequest("Invalid datetime format", detail="Naive datetime is disallowed")
 
@@ -64,6 +70,11 @@ def check_limit(value: int) -> int:
     fallback = conf.getint("api", "fallback_page_limit")
 
     if value > max_val:
+        log.warning(
+            "The limit param value %s passed in API exceeds the configured maximum page limit %s",
+            value,
+            max_val,
+        )
         return max_val
     if value == 0:
         return fallback
@@ -77,7 +88,7 @@ T = TypeVar("T", bound=Callable)
 
 def format_parameters(params_formatters: dict[str, Callable[[Any], Any]]) -> Callable[[T], T]:
     """
-    Decorator factory that create decorator that convert parameters using given formatters.
+    Create a decorator to convert parameters using given formatters.
 
     Using it allows you to separate parameter formatting from endpoint logic.
 
@@ -98,11 +109,11 @@ def format_parameters(params_formatters: dict[str, Callable[[Any], Any]]) -> Cal
 
 
 def apply_sorting(
-    query: Query,
+    query: Select,
     order_by: str,
     to_replace: dict[str, str] | None = None,
     allowed_attrs: Container[str] | None = None,
-) -> Query:
+) -> Select:
     """Apply sorting to query."""
     lstriped_orderby = order_by.lstrip("-")
     if allowed_attrs and lstriped_orderby not in allowed_attrs:

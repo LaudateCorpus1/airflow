@@ -18,7 +18,7 @@
 # This is automatically generated stub for the `common.sql` provider
 #
 # This file is generated automatically by the `update-common-sql-api stubs` pre-commit
-# and the .pyi file represents part of the the "public" API that the
+# and the .pyi file represents part of the "public" API that the
 # `common.sql` provider exposes to other providers.
 #
 # Any, potentially breaking change in the stubs will require deliberate manual action from the contributor
@@ -68,6 +68,7 @@ class SQLExecuteQueryOperator(BaseSQLOperator):
     handler: Incomplete
     split_statements: Incomplete
     return_last: Incomplete
+    show_return_value_in_logs: Incomplete
     def __init__(
         self,
         *,
@@ -77,6 +78,7 @@ class SQLExecuteQueryOperator(BaseSQLOperator):
         handler: Callable[[Any], Any] = ...,
         split_statements: Union[bool, None] = ...,
         return_last: bool = ...,
+        show_return_value_in_logs: bool = ...,
         **kwargs,
     ) -> None: ...
     def execute(self, context): ...

@@ -17,34 +17,46 @@
 # under the License.
 from __future__ import annotations
 
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from google.api_core.client_options import ClientOptions
 from google.api_core.gapic_v1.method import DEFAULT, _MethodDefault
-from google.api_core.operation import Operation
-from google.api_core.operation_async import AsyncOperation
-from google.api_core.retry import Retry
 from google.cloud.orchestration.airflow.service_v1 import (
     EnvironmentsAsyncClient,
     EnvironmentsClient,
     ImageVersionsClient,
 )
-from google.cloud.orchestration.airflow.service_v1.services.environments.pagers import ListEnvironmentsPager
-from google.cloud.orchestration.airflow.service_v1.services.image_versions.pagers import (
-    ListImageVersionsPager,
-)
-from google.cloud.orchestration.airflow.service_v1.types import Environment
-from google.protobuf.field_mask_pb2 import FieldMask
 
-from airflow import AirflowException
+from airflow.exceptions import AirflowException
 from airflow.providers.google.common.consts import CLIENT_INFO
 from airflow.providers.google.common.hooks.base_google import GoogleBaseHook
+
+if TYPE_CHECKING:
+    from google.api_core.operation import Operation
+    from google.api_core.operation_async import AsyncOperation
+    from google.api_core.retry import Retry
+    from google.cloud.orchestration.airflow.service_v1.services.environments.pagers import (
+        ListEnvironmentsPager,
+    )
+    from google.cloud.orchestration.airflow.service_v1.services.image_versions.pagers import (
+        ListImageVersionsPager,
+    )
+    from google.cloud.orchestration.airflow.service_v1.types import Environment
+    from google.protobuf.field_mask_pb2 import FieldMask
 
 
 class CloudComposerHook(GoogleBaseHook):
     """Hook for Google Cloud Composer APIs."""
 
     client_options = ClientOptions(api_endpoint="composer.googleapis.com:443")
+
+    def __init__(self, **kwargs):
+        if kwargs.get("delegate_to") is not None:
+            raise RuntimeError(
+                "The `delegate_to` parameter has been deprecated before and finally removed in this version"
+                " of Google Provider. You MUST convert it to `impersonate_chain`"
+            )
+        super().__init__(**kwargs)
 
     def get_environment_client(self) -> EnvironmentsClient:
         """Retrieves client library object that allow access Environments service."""
@@ -148,6 +160,7 @@ class CloudComposerHook(GoogleBaseHook):
     ) -> Environment:
         """
         Get an existing environment.
+
         :param project_id: Required. The ID of the Google Cloud project that the service belongs to.
         :param region: Required. The ID of the Google Cloud region that the service belongs to.
         :param environment_id: Required. The ID of the Google Cloud environment that the service belongs to.
@@ -283,6 +296,14 @@ class CloudComposerHook(GoogleBaseHook):
 
 class CloudComposerAsyncHook(GoogleBaseHook):
     """Hook for Google Cloud Composer async APIs."""
+
+    def __init__(self, **kwargs):
+        if kwargs.get("delegate_to") is not None:
+            raise RuntimeError(
+                "The `delegate_to` parameter has been deprecated before and finally removed in this version"
+                " of Google Provider. You MUST convert it to `impersonate_chain`"
+            )
+        super().__init__(**kwargs)
 
     client_options = ClientOptions(api_endpoint="composer.googleapis.com:443")
 

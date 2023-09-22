@@ -24,6 +24,7 @@ import subprocess
 import sys
 import textwrap
 from contextlib import suppress
+from pathlib import Path
 from tempfile import gettempdir
 from time import sleep
 
@@ -38,6 +39,7 @@ from lockfile.pidlockfile import read_pid_from_pidfile
 from sqlalchemy.engine.url import make_url
 
 from airflow import settings
+from airflow.api_internal.internal_api_call import InternalApiConfig
 from airflow.cli.commands.webserver_command import GunicornMonitor
 from airflow.configuration import conf
 from airflow.exceptions import AirflowConfigException
@@ -46,6 +48,7 @@ from airflow.models import import_all_models
 from airflow.utils import cli as cli_utils
 from airflow.utils.cli import setup_locations, setup_logging
 from airflow.utils.process_utils import check_if_pidfile_process_is_running
+from airflow.utils.providers_configuration_loader import providers_configuration_loaded
 from airflow.www.extensions.init_dagbag import init_dagbag
 from airflow.www.extensions.init_jinja_globals import init_jinja_globals
 from airflow.www.extensions.init_manifest_files import configure_manifest_files
@@ -57,8 +60,9 @@ app: Flask | None = None
 
 
 @cli_utils.action_cli
+@providers_configuration_loaded
 def internal_api(args):
-    """Starts Airflow Internal API."""
+    """Start Airflow Internal API."""
     print(settings.HEADER)
 
     access_logfile = args.access_logfile or "-"
@@ -133,14 +137,14 @@ def internal_api(args):
         # then have a copy of the app
         run_args += ["--preload"]
 
-        gunicorn_master_proc = None
+        gunicorn_master_proc: psutil.Process | None = None
 
         def kill_proc(signum, _):
             log.info("Received signal: %s. Closing gunicorn.", signum)
             gunicorn_master_proc.terminate()
             with suppress(TimeoutError):
                 gunicorn_master_proc.wait(timeout=30)
-            if gunicorn_master_proc.poll() is not None:
+            if gunicorn_master_proc.is_running():
                 gunicorn_master_proc.kill()
             sys.exit(0)
 
@@ -167,13 +171,15 @@ def internal_api(args):
 
             handle = setup_logging(log_file)
 
-            base, ext = os.path.splitext(pid_file)
+            pid_path = Path(pid_file)
+            pidlock_path = pid_path.with_name(f"{pid_path.stem}-monitor{pid_path.suffix}")
+
             with open(stdout, "a") as stdout, open(stderr, "a") as stderr:
                 stdout.truncate(0)
                 stderr.truncate(0)
 
                 ctx = daemon.DaemonContext(
-                    pidfile=TimeoutPIDLockFile(f"{base}-monitor{ext}", -1),
+                    pidfile=TimeoutPIDLockFile(pidlock_path, -1),
                     files_preserve=[handle],
                     stdout=stdout,
                     stderr=stderr,
@@ -184,11 +190,10 @@ def internal_api(args):
 
                     # Reading pid of gunicorn main process as it will be different that
                     # the one of process spawned above.
-                    while True:
+                    gunicorn_master_proc_pid = None
+                    while not gunicorn_master_proc_pid:
                         sleep(0.1)
                         gunicorn_master_proc_pid = read_pid_from_pidfile(pid_file)
-                        if gunicorn_master_proc_pid:
-                            break
 
                     # Run Gunicorn monitor
                     gunicorn_master_proc = psutil.Process(gunicorn_master_proc_pid)
@@ -200,7 +205,7 @@ def internal_api(args):
 
 
 def create_app(config=None, testing=False):
-    """Create a new instance of Airflow Internal API app"""
+    """Create a new instance of Airflow Internal API app."""
     flask_app = Flask(__name__)
 
     flask_app.config["APP_NAME"] = "Airflow Internal API"
@@ -224,6 +229,8 @@ def create_app(config=None, testing=False):
 
     if "SQLALCHEMY_ENGINE_OPTIONS" not in flask_app.config:
         flask_app.config["SQLALCHEMY_ENGINE_OPTIONS"] = settings.prepare_engine_args()
+
+    InternalApiConfig.force_database_direct_access()
 
     csrf = CSRFProtect()
     csrf.init_app(flask_app)
@@ -252,7 +259,7 @@ def create_app(config=None, testing=False):
 
 
 def cached_app(config=None, testing=False):
-    """Return cached instance of Airflow Internal API app"""
+    """Return cached instance of Airflow Internal API app."""
     global app
     if not app:
         app = create_app(config=config, testing=testing)
